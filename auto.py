@@ -1,317 +1,429 @@
 import os #WRKFLW
+import sys
 import requests
 import time
-import sys
-import random
-from datetime import datetime, timedelta, timezone
+import threading
+import shutil
 
-def get_now_wib():
-    tz_wib = timezone(timedelta(hours=7))
-    return datetime.now(tz_wib)
+try:
+    import pyfiglet
+except ImportError:
+    pyfiglet = None
+
+if os.name == 'nt':
+    os.system('')
 
 # ==========================================
-# 🎯 UNIVERSAL DYNAMIC CONFIGURATION
+# ⚙️ CONFIGURATION COMMAND CENTER
 # ==========================================
-# ACTION_TYPE bisa diisi: STARS, FORKS, WATCH, FOLLOW
-ACTION_TYPE = os.environ.get("ACTION_TYPE", "STARS").strip().upper()
+TELEGRAM_BOT_TOKEN = "8275940423:AAEW8ZOn2ZoK64I2Bwcw9reJI7D0I1RmcrE" # Ganti kalau tokennya beda
+ADMIN_ID = "6740043923"
+USERS_FILE = "users.txt"
+BROADCAST_CHATS = ["6740043923", "-1003626912079", "-1003798466502"]
 
-if ACTION_TYPE == "FOLLOW":
-    RAW_TARGETS = os.environ.get("TARGET_USERS", "")
-    TARGET_LABEL = "Target User"
-else:
-    RAW_TARGETS = os.environ.get("TARGET_REPOS", "")
-    TARGET_LABEL = "Target Repo"
+# ==========================================
+# ☁️ MULTI-CLOUD ENGINES CONFIGURATION
+# ==========================================
+CLOUD_ENGINES = {
+    "1": {"name": "Engine 1 (Main)", "token": "ghp_TokenAdminUtamaLuDisini", "repo": "ithallodieh/XianBee-Cloud-Workers"},
+    "2": {"name": "Engine 2", "token": "ghp_TokenAdminMesinDuaDisini", "repo": "username2/Repo-Mesin-2"},
+    "3": {"name": "Engine 3", "token": "ghp_TokenAdminMesinTigaDisini", "repo": "username3/Repo-Mesin-3"},
+    "4": {"name": "Engine 4", "token": "ghp_TokenAdminMesinEmpatDisini", "repo": "username4/Repo-Mesin-4"},
+    "5": {"name": "Engine 5", "token": "ghp_TokenAdminMesinLimaDisini", "repo": "username5/Repo-Mesin-5"},
+    "6": {"name": "Engine 6", "token": "ghp_TokenAdminMesinEnamDisini", "repo": "username6/Repo-Mesin-6"},
+    "7": {"name": "Engine 7", "token": "ghp_TokenAdminMesinTujuhDisini", "repo": "username7/Repo-Mesin-7"},
+    "8": {"name": "Engine 8", "token": "ghp_TokenAdminMesinDelapanDisini", "repo": "username8/Repo-Mesin-8"},
+    "9": {"name": "Engine 9", "token": "ghp_TokenAdminMesinSembilanDisini", "repo": "username9/Repo-Mesin-9"},
+    "10": {"name": "Engine 10", "token": "ghp_TokenAdminMesinSepuluhDisini", "repo": "username10/Repo-Mesin-10"}
+}
 
-TARGETS = [t.strip() for t in RAW_TARGETS.split(",") if t.strip()]
+WORKFLOW_MAP = {
+    "/stars": "auto_star.yml",
+    "/forks": "auto_fork.yml",
+    "/watch": "auto_watch.yml",
+    "/follow": "auto_follow.yml"
+}
 
-INPUT_QTY = int(os.environ.get("INPUT_QTY", 0))
-INPUT_DUR = float(os.environ.get("INPUT_DUR", 0))
-INPUT_START = int(os.environ.get("INPUT_START", 1))
+# ==========================================
+# 🌍 BILINGUAL DICTIONARY (MULTI-LANGUAGE)
+# ==========================================
+USER_LANG = {} # Menyimpan preferensi bahasa per user_id
 
-QUOTES = [
-    '"Talk is cheap. Show me the code." – Linus Torvalds',
-    '"Simplicity is the soul of efficiency." – Austin Freeman',
-    '"Make it work, make it right, make it fast." – Kent Beck',
-    '"Automate the boring stuff, master the complex." – Abie Haryatmo',
-    '"Clean code always looks like it was written by someone who cares." – Robert C. Martin'
-]
+LANG_DICT = {
+    "id": {
+        "help": "<blockquote>🤖 <b>XIANBEE COMMAND CENTER</b></blockquote>\n\n<b>🚀 DYNAMIC CLOUD ACTIONS:</b>\n👉 <code>/stars</code> <i>(Cloud: Stars Injection)</i>\n👉 <code>/forks</code> <i>(Cloud: Forks Injection)</i>\n👉 <code>/watch</code> <i>(Cloud: Watch Injection)</i>\n👉 <code>/follow</code> <i>(Cloud: Follow Injection)</i>\n👉 <code>/allin</code> <i>(Cloud: Parallel Combo)</i>\n\n👉 <code>/cancel</code> <i>(Batalkan perintah saat ini)</i>\n",
+        "err_invalid_engine": "❌ <b>Pilihan tidak valid!</b> Masukkan nomor mesin yang ada di daftar:",
+        "prompt_engine": "👇 <b>{cmd} CLOUD WIZARD INITIATED</b>\n\nPilih <b>Mesin Cloud</b> yang mau dipakai untuk eksekusi ini:\n\n{engine_list}\n\n<i>Balas dengan angka. Ketik /cancel untuk membatalkan.</i>",
+        "prompt_target": "✅ Mesin <b>{engine}</b> dipilih.\n\n👇 Masukkan <b>Target Repositori / Username</b>:\n<i>Contoh: abieharyatmo/projek-keren</i>\n\n<i>Ketik /cancel untuk membatalkan.</i>",
+        "prompt_qty": "🔢 <b>JUMLAH EKSEKUSI</b>\n\nBerapa banyak <b>{service}</b> yang ingin ditembakkan ke <code>{target}</code>?\n<i>Contoh: 20</i>\n\n<i>Ketik /cancel untuk batal.</i>",
+        "err_number": "❌ <b>Harus Angka!</b> Masukkan angka yang valid:",
+        "prompt_duration": "⏳ <b>DURASI PENGERJAAN</b>\n\nIngin diselesaikan dalam berapa <b>JAM</b>? (Makin lama makin aman).\n<i>Contoh: Ketik <b>1</b> untuk 1 jam, <b>5.5</b> untuk 5.5 jam.</i>",
+        "err_duration": "❌ Durasi harus lebih dari 0.",
+        "prompt_index": "🔑 <b>PILIH TOKEN DI SECRETS</b>\n\nMau mulai pakai token dari urutan ke berapa di Secrets GitHub lu?\n<i>Contoh: Ketik <b>1</b> untuk mulai dari token pertama.</i>",
+        "transmitting": "📡 <i>Transmitting <b>{cmd}</b> signal to <b>{engine}</b>...</i>",
+        "parallel_deployed": "╔═════════════════════════╗\n   🚀 <b>PARALLEL CLOUD DEPLOYED</b>\n╚═════════════════════════╝\n\n🖥️ <b>Engine :</b> {engine}\n🎯 <b>Target :</b> <a href='https://github.com/{target}'>{target}</a>\n📦 <b>Jumlah :</b> {qty} Actions/Service\n⏳ <b>Durasi :</b> {dur} Jam\n🔑 <b>Token  :</b> Urutan #{index}\n\n<b>[ Dispatch Status ]</b>\n{status}\n\n<i>Mesin Cloud berjalan paralel di GitHub Actions!</i>",
+        "cloud_deployed": "╔═════════════════════════╗\n   🚀 <b>CLOUD DEPLOYED</b>\n╚═════════════════════════╝\n\n🖥️ <b>Engine :</b> {engine}\n🛠️ <b>Action :</b> {cmd}\n🎯 <b>Target :</b> <a href='https://github.com/{target}'>{target}</a>\n📦 <b>Jumlah :</b> {qty} Actions\n⏳ <b>Durasi :</b> {dur} Jam\n🔑 <b>Token  :</b> Mulai urutan #{index}\n\n✅ Sinyal dieksekusi! GitHub Actions sedang memproses secara Stealth.",
+        "cloud_failed": "❌ <b>Cloud Dispatch Failed!</b>\nError: {msg}",
+        "cancelled": "🚫 <b>Aksi Dibatalkan.</b>"
+    },
+    "en": {
+        "help": "<blockquote>🤖 <b>XIANBEE COMMAND CENTER</b></blockquote>\n\n<b>🚀 DYNAMIC CLOUD ACTIONS:</b>\n👉 <code>/stars</code> <i>(Cloud: Stars Injection)</i>\n👉 <code>/forks</code> <i>(Cloud: Forks Injection)</i>\n👉 <code>/watch</code> <i>(Cloud: Watch Injection)</i>\n👉 <code>/follow</code> <i>(Cloud: Follow Injection)</i>\n👉 <code>/allin</code> <i>(Cloud: Parallel Combo)</i>\n\n👉 <code>/cancel</code> <i>(Cancel current command)</i>\n",
+        "err_invalid_engine": "❌ <b>Invalid choice!</b> Enter a number from the list:",
+        "prompt_engine": "👇 <b>{cmd} CLOUD WIZARD INITIATED</b>\n\nSelect the <b>Cloud Engine</b> to use for this execution:\n\n{engine_list}\n\n<i>Reply with a number. Type /cancel to abort.</i>",
+        "prompt_target": "✅ Engine <b>{engine}</b> selected.\n\n👇 Enter <b>Target Repository / Username</b>:\n<i>Example: abieharyatmo/awesome-project</i>\n\n<i>Type /cancel to abort.</i>",
+        "prompt_qty": "🔢 <b>EXECUTION QUANTITY</b>\n\nHow many <b>{service}</b> injections for <code>{target}</code>?\n<i>Example: 20</i>\n\n<i>Type /cancel to abort.</i>",
+        "err_number": "❌ <b>Must be a Number!</b> Enter a valid number:",
+        "prompt_duration": "⏳ <b>EXECUTION DURATION</b>\n\nHow many <b>HOURS</b> should this take? (Longer = Safer).\n<i>Example: Type <b>1</b> for 1 hr, <b>5.5</b> for 5.5 hrs.</i>",
+        "err_duration": "❌ Duration must be greater than 0.",
+        "prompt_index": "🔑 <b>SELECT TOKEN INDEX</b>\n\nWhich token index in GitHub Secrets should we start from?\n<i>Example: Type <b>1</b> for the first token.</i>",
+        "transmitting": "📡 <i>Transmitting <b>{cmd}</b> signal to <b>{engine}</b>...</i>",
+        "parallel_deployed": "╔═════════════════════════╗\n   🚀 <b>PARALLEL CLOUD DEPLOYED</b>\n╚═════════════════════════╝\n\n🖥️ <b>Engine :</b> {engine}\n🎯 <b>Target :</b> <a href='https://github.com/{target}'>{target}</a>\n📦 <b>Quantity :</b> {qty} Actions/Service\n⏳ <b>Duration :</b> {dur} Hours\n🔑 <b>Token  :</b> Index #{index}\n\n<b>[ Dispatch Status ]</b>\n{status}\n\n<i>Cloud engines are now running in parallel on GitHub Actions!</i>",
+        "cloud_deployed": "╔═════════════════════════╗\n   🚀 <b>CLOUD DEPLOYED</b>\n╚═════════════════════════╝\n\n🖥️ <b>Engine :</b> {engine}\n🛠️ <b>Action :</b> {cmd}\n🎯 <b>Target :</b> <a href='https://github.com/{target}'>{target}</a>\n📦 <b>Quantity :</b> {qty} Actions\n⏳ <b>Duration :</b> {dur} Hours\n🔑 <b>Token  :</b> Starting index #{index}\n\n✅ Signal Dispatched! GitHub Actions is processing stealthily.",
+        "cloud_failed": "❌ <b>Cloud Dispatch Failed!</b>\nError: {msg}",
+        "cancelled": "🚫 <b>Action Cancelled.</b>"
+    }
+}
 
-def send_telegram_notification(message):
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_ids_raw = os.environ.get("TELEGRAM_CHAT_ID")
-    if not bot_token or not chat_ids_raw: return {}
-    chat_ids = [chat_id.strip() for chat_id in chat_ids_raw.split(",") if chat_id.strip()]
+# ==========================================
+# 🧠 STATE MANAGEMENT & LOGGING
+# ==========================================
+PENDING_STATES = {}
+ASCII_TIMER = None
+
+C_RED = "\033[91m"
+C_GREEN = "\033[92m"
+C_YELLOW = "\033[93m"
+C_BLUE = "\033[94m"
+C_MAGENTA = "\033[95m"
+C_CYAN = "\033[96m"
+C_RESET = "\033[0m"
+
+def log_terminal(message, level="INFO"):
+    now = time.strftime("%H:%M:%S")
+    prefix = f"{C_CYAN}[*]{C_RESET}" if level == "INFO" else f"{C_GREEN}[+]{C_RESET}" if level == "SUCCESS" else f"{C_RED}[-]{C_RESET}" if level == "ERROR" else f"{C_YELLOW}[~]{C_RESET}"
+    text_color = C_CYAN if level == "INFO" else C_GREEN if level == "SUCCESS" else C_RED if level == "ERROR" else C_YELLOW
+
+    term_cols, _ = shutil.get_terminal_size()
+    box_width = 80 
+    pad_left = max(0, (term_cols - box_width) // 2)
+    indent = " " * pad_left
+
+    lines = message.split('\n')
+    print(f"{indent}{C_BLUE}[{now}]{C_RESET} {prefix} {text_color}{lines[0]}{C_RESET}")
+    for line in lines[1:]:
+        print(f"{indent}                  {text_color}{line}{C_RESET}")
+
+def set_bot_commands():
+    """Mengatur menu garis miring (/) di Telegram"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setMyCommands"
+    commands = [
+        {"command": "start", "description": "Start / Change Language"},
+        {"command": "stars", "description": "Cloud: STARS on target"},
+        {"command": "forks", "description": "Cloud: FORKS on target"},
+        {"command": "watch", "description": "Cloud: WATCH on target"},
+        {"command": "follow", "description": "Cloud: FOLLOW on target"},
+        {"command": "allin", "description": "Cloud: ALL actions (Parallel)"},
+        {"command": "cancel", "description": "Cancel current action"},
+        {"command": "help", "description": "Show guide menu"}
+    ]
+    try: requests.post(url, json={"commands": commands}, timeout=10)
+    except: pass
+
+def get_authorized_users():
+    users = [ADMIN_ID]
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r") as f:
+            users.extend([line.strip() for line in f.readlines() if line.strip()])
+    return list(set(users))
+
+def send_message(chat_id, text, reply_markup=None):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
+    if reply_markup: payload["reply_markup"] = reply_markup
+    try:
+        res = requests.post(url, json=payload, timeout=10).json()
+        if res.get("ok"): return str(res.get("result", {}).get("message_id"))
+    except: pass
+    return None
+
+def edit_message(chat_id, message_id, text, reply_markup=None):
+    if not message_id: return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/editMessageText"
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
+    if reply_markup: payload["reply_markup"] = reply_markup
+    try: requests.post(url, json=payload, timeout=10)
+    except: pass
+
+def broadcast_message(text, exclude_id=None):
     sent_messages = {}
-    for chat_id in chat_ids:
-        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
-        try:
-            res = requests.post(url, json=payload, timeout=15)
-            if res.status_code == 200:
-                sent_messages[chat_id] = res.json()['result']['message_id']
-        except: pass
+    for chat_id in BROADCAST_CHATS:
+        if str(chat_id) == str(exclude_id): continue 
+        msg_id = send_message(chat_id, text)
+        if msg_id: sent_messages[chat_id] = msg_id
     return sent_messages
 
-def edit_telegram_notification(sent_messages, new_message):
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if not bot_token or not sent_messages: return
-    for chat_id, msg_id in sent_messages.items():
-        url = f"https://api.telegram.org/bot{bot_token}/editMessageText"
-        payload = {"chat_id": chat_id, "message_id": msg_id, "text": new_message, "parse_mode": "HTML", "disable_web_page_preview": True}
-        try: requests.post(url, json=payload, timeout=15)
+# ==========================================
+# ☁️ CLOUD ACTIONS TRIGGER
+# ==========================================
+def trigger_github_workflow(engine_id, workflow_file, target, quantity, duration, start_index):
+    engine = CLOUD_ENGINES.get(engine_id)
+    if not engine:
+        return False, "❌ Error: Mesin Cloud tidak ditemukan di konfigurasi."
+
+    url = f"https://api.github.com/repos/{engine['repo']}/actions/workflows/{workflow_file}/dispatches"
+    headers = {
+        "Authorization": f"Bearer {engine['token']}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    data = {
+        "ref": "main", # Ganti "master" jika repo lu pakai branch master
+        "inputs": {
+            "target": str(target),
+            "quantity": str(quantity),
+            "duration": str(duration),
+            "start_index": str(start_index)
+        }
+    }
+    try:
+        res = requests.post(url, headers=headers, json=data, timeout=10)
+        if res.status_code == 204: return True, f"✅ Signal success ({engine['name']})"
+        else: return False, f"❌ Failed dispatch ({res.status_code}): {res.text}"
+    except Exception as e:
+        return False, f"❌ Error triggering {engine['name']}: {str(e)}"
+
+# ==========================================
+# 🖥️ TERMINAL DISPLAY
+# ==========================================
+def print_main_banner():
+    os.system('cls' if os.name == 'nt' else 'clear')
+    term_cols, term_lines = shutil.get_terminal_size()
+    print("\n" * max(1, (term_lines - 15) // 3))
+    if pyfiglet:
+        try:
+            ascii_banner = pyfiglet.figlet_format("XIANBEE CLOUD", font="slant")
+            for line in ascii_banner.split('\n'):
+                if line.strip():
+                    pad = max(0, (term_cols - len(line)) // 2)
+                    print(" " * pad + f"{C_CYAN}{line}{C_RESET}")
         except: pass
+    print("")
+    subtitle = "🤖 CLOUD COMMAND CENTER IS ONLINE"
+    sub_pad = max(0, (term_cols - len(subtitle)) // 2)
+    print(" " * sub_pad + f"{C_MAGENTA}{subtitle}{C_RESET}\n")
 
-def check_existing(token, target, action_type):
-    """Mengecek apakah token ini sudah pernah melakukan aksi ke target sebelumnya"""
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json", "X-GitHub-Api-Version": "2022-11-28"}
-    try:
-        if action_type == "STARS":
-            return requests.get(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10).status_code == 204
-        elif action_type == "WATCH":
-            res = requests.get(f"https://api.github.com/repos/{target}/subscription", headers=headers, timeout=10)
-            return res.status_code == 200 and res.json().get("subscribed") == True
-        elif action_type == "FOLLOW":
-            return requests.get(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10).status_code == 204
-        elif action_type == "FORKS":
-            user_res = requests.get("https://api.github.com/user", headers=headers, timeout=10)
-            if user_res.status_code == 200:
-                username = user_res.json().get("login")
-                repo_name = target.split("/")[-1] 
-                check_res = requests.get(f"https://api.github.com/repos/{username}/{repo_name}", headers=headers, timeout=10)
-                return check_res.status_code == 200 and check_res.json().get("fork") == True
-    except: pass
-    return False
-
-def perform_api_action(token, target, action_type):
-    """Mengeksekusi API GitHub sesuai dengan Action Type yang diminta"""
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json", "X-GitHub-Api-Version": "2022-11-28"}
-    try:
-        if action_type == "STARS":
-            res = requests.put(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10)
-            if res.status_code == 204: return True, "⭐ <b>STAR STATUS ACTIVE</b>"
-            return False, f"❌ <b>STAR FAILED</b> ({res.status_code})"
-            
-        elif action_type == "FORKS":
-            res = requests.post(f"https://api.github.com/repos/{target}/forks", headers=headers, timeout=10)
-            if res.status_code in [201, 202]: return True, "📦 <b>REPOSITORY FORKED</b>"
-            return False, f"❌ <b>FORK FAILED</b> ({res.status_code})"
-            
-        elif action_type == "WATCH":
-            res = requests.put(f"https://api.github.com/repos/{target}/subscription", headers=headers, json={"subscribed": True}, timeout=10)
-            if res.status_code == 200: return True, "👁️ <b>WATCH STATUS ACTIVE</b>"
-            return False, f"❌ <b>WATCH FAILED</b> ({res.status_code})"
-            
-        elif action_type == "FOLLOW":
-            res = requests.put(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
-            if res.status_code == 204: return True, "🫂 <b>FOLLOW STATUS ACTIVE</b>"
-            return False, f"❌ <b>FOLLOW FAILED</b> ({res.status_code})"
-    except:
-        return False, f"❌ <b>{action_type} ERROR</b>"
-
-def do_action(token, target, token_idx, sent_msgs, current_step, total_steps):
-    target_url = f"https://github.com/{target}"
-    token_preview = f"{token[:8]}...{token[-4:]}"
-    
-    def update_loading(action_text):
-        progress_pct = int((current_step / total_steps) * 100)
-        bar_len = 10
-        filled = int(progress_pct / 10)
-        bar = "█" * filled + "░" * (bar_len - filled)
-        
-        msg = (f"╔════════════════════╗\n"
-               f"   ⏳ <b>LIVE EXECUTION</b>\n"
-               f"╚════════════════════╝\n\n"
-               f"🔄 <i>{action_text}</i>\n"
-               f"══════════════════════\n"
-               f"🎯 <b>{TARGET_LABEL} :</b> <a href='{target_url}'>{target}</a>\n"
-               f"🤖 <b>Node   :</b> #{token_idx + 1} ({token_preview})\n"
-               f"📊 <b>Proses :</b> <code>[{bar}] {progress_pct}%</code>\n"
-               f"🔢 <b>Status :</b> {current_step} dari {total_steps} Selesai\n\n"
-               f"🛡️ <i>Engineered by Abie Haryatmo</i>\n"
-               f"🤝 <b>Powered by XianBeeStore</b>")
-        edit_telegram_notification(sent_msgs, msg)
-
-    results = []
-    
-    update_loading("Checking worker status...")
-    if check_existing(token, target, ACTION_TYPE):
-        results.append(f"⚠️ <b>TASK SKIPPED</b> (Already {ACTION_TYPE.lower()}ed)")
-        return True, "\n".join(results)
-        
-    update_loading(f"Deploying {ACTION_TYPE} protocol...")
-    time.sleep(random.randint(5, 10)) 
-    
-    is_success, msg = perform_api_action(token, target, ACTION_TYPE)
-    results.append(msg)
-        
-    return False, "\n".join(results)
-
+# ==========================================
+# 📡 TELEGRAM POLLING LISTENER
+# ==========================================
 def main():
-    time.sleep(random.randint(1, 5))
-    tokens_raw = os.environ.get("WORKER_TOKENS", "")
-    tokens = [t.strip() for t in tokens_raw.splitlines() if t.strip()]
-    
-    if not tokens or not TARGETS:
-        print("❌ ERROR: Worker credentials or Target missing!")
-        sys.exit(1)
+    print_main_banner()
+    log_terminal("Registering Bot Commands...", "PROCESS")
+    set_bot_commands() 
 
-    is_manual_trigger = INPUT_QTY > 0
+    last_update_id = 0
+    valid_cloud_commands = ["/stars", "/forks", "/watch", "/follow", "/allin"]
 
-    # =========================================================
-    # 🧠 EKSEKUSI MODE MANUAL (TELEGRAM TRIGGER)
-    # =========================================================
-    if is_manual_trigger:
-        start_idx = INPUT_START - 1 
-        end_idx = start_idx + INPUT_QTY
-        tokens_to_use = tokens[start_idx:end_idx]
-        total_qty = len(tokens_to_use)
-        
-        if not tokens_to_use:
-            send_telegram_notification(f"❌ <b>EXECUTION ABORTED</b>\nToken habis atau urutan #{INPUT_START} tidak tersedia.")
-            sys.exit(1)
-
-        base_delay = (INPUT_DUR * 3600) / max(1, total_qty)
-        selected_target = TARGETS[0]
-        target_url = f"https://github.com/{selected_target}"
-
-        pre_msg = (f"╔════════════════════╗\n"
-                   f" ⚙️ <b>CLOUD WORKER AWAKE</b>\n"
-                   f"╚════════════════════╝\n\n"
-                   f"<i>Mode: DYNAMIC {ACTION_TYPE} INJECTION</i>\n"
-                   f"🎯 <b>{TARGET_LABEL}:</b> <a href='{target_url}'>{selected_target}</a>\n"
-                   f"🤖 <b>Tokens:</b> Urutan #{INPUT_START} s/d #{start_idx + total_qty}\n"
-                   f"⏳ <b>Pacing:</b> {INPUT_DUR} Jam (~{int(base_delay)} dtk/node)\n\n"
-                   f"🛡️ <i>Engineered by Abie Haryatmo</i>")
-        send_telegram_notification(pre_msg)
-
-        success_count = 0
-        for i, token in enumerate(tokens_to_use):
-            token_idx = start_idx + i
-            token_preview = f"{token[:8]}...{token[-4:]}"
-            time_str = get_now_wib().strftime('%d/%m/%Y %H:%M:%S WIB')
-            selected_quote = random.choice(QUOTES)
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates?offset={last_update_id + 1}&timeout=30"
+            response = requests.get(url, timeout=35).json()
             
-            progress_pct = int(((i) / total_qty) * 100)
-            bar = "█" * int(progress_pct / 10) + "░" * (10 - int(progress_pct / 10))
-            
-            init_msg = (f"╔════════════════════╗\n"
-                        f" ⏳ <b>PREPARING WORKER...</b>\n"
-                        f"╚════════════════════╝\n\n"
-                        f"<i>Establishing secure connection to GitHub API...</i>\n"
-                        f"══════════════════════\n"
-                        f"🎯 <b>{TARGET_LABEL} :</b> <a href='{target_url}'>{selected_target}</a>\n"
-                        f"🤖 <b>Node   :</b> #{token_idx + 1} ({token_preview})\n"
-                        f"📊 <b>Proses :</b> <code>[{bar}] {progress_pct}%</code>\n"
-                        f"🔢 <b>Status :</b> {i} dari {total_qty} Selesai\n\n"
-                        f"🛡️ <i>Engineered by Abie Haryatmo</i>")
-            sent_msgs = send_telegram_notification(init_msg)
+            for update in response.get("result", []):
+                last_update_id = update["update_id"]
+                
+                # Handling Callback (Inline Keyboard) dan Teks Biasa
+                is_callback = False
+                text = ""
+                user_id = ""
+                username = "Unknown"
+                chat_id = ""
+                message_id = None
+                callback_data = ""
 
-            is_skipped, result = do_action(token, selected_target, token_idx, sent_msgs, i+1, total_qty)
-            
-            if "ACTIVE" in result or "FORKED" in result or "SKIPPED" in result: success_count += 1
-            
-            final_pct = int(((i + 1) / total_qty) * 100)
-            final_bar = "█" * int(final_pct / 10) + "░" * (10 - int(final_pct / 10))
+                if "message" in update:
+                    message = update["message"]
+                    text = message.get("text", "")
+                    user_id = str(message.get("from", {}).get("id", ""))
+                    username = message.get("from", {}).get("username", "Unknown")
+                    chat_id = str(message.get("chat", {}).get("id", ""))
+                elif "callback_query" in update:
+                    callback = update["callback_query"]
+                    is_callback = True
+                    callback_data = callback.get("data", "")
+                    user_id = str(callback.get("from", {}).get("id", ""))
+                    username = callback.get("from", {}).get("username", "Unknown")
+                    msg_obj = callback.get("message", {})
+                    chat_id = str(msg_obj.get("chat", {}).get("id", ""))
+                    message_id = msg_obj.get("message_id")
+                    try: requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery", json={"callback_query_id": callback["id"]}, timeout=5)
+                    except: pass
+                
+                auth_users = get_authorized_users()
+                if user_id not in auth_users: continue
 
-            final_msg = (
-                f"╔════════════════════╗\n"
-                f" 🚀 <b>DEPLOYMENT SUCCESS</b>\n"
-                f"╚════════════════════╝\n\n"
-                f"{result}\n"
-                f"══════════════════════\n"
-                f"🎯 <b>{TARGET_LABEL} :</b> <a href='{target_url}'>{selected_target}</a>\n"
-                f"🤖 <b>Node   :</b> #{token_idx + 1} ({token_preview})\n"
-                f"📊 <b>Proses :</b> <code>[{final_bar}] {final_pct}%</code>\n"
-                f"⏱️ <b>Waktu  :</b> {time_str}\n\n"
-                f"#CloudAutomation\n"
-                f"<i>{selected_quote}</i>"
-            )
-            if sent_msgs: edit_telegram_notification(sent_msgs, final_msg)
-            
-            if i < total_qty - 1:
-                actual_delay = random.uniform(base_delay * 0.8, base_delay * 1.2)
-                time.sleep(actual_delay)
+                # Ambil preferensi bahasa, default Indonesia
+                lang = USER_LANG.get(user_id, "id")
+                lang_data = LANG_DICT[lang]
 
-        final_msg = (f"╔════════════════════╗\n"
-                     f" ✅ <b>MISSION ACCOMPLISHED</b>\n"
-                     f"╚════════════════════╝\n\n"
-                     f"<b>Action:</b> {ACTION_TYPE} INJECTION\n"
-                     f"<b>Target:</b> <a href='{target_url}'>{selected_target}</a>\n"
-                     f"<b>Success:</b> {success_count}/{total_qty} Nodes\n\n"
-                     f"🛡️ <i>Engineered by Abie Haryatmo</i>")
-        send_telegram_notification(final_msg)
-        sys.exit(0)
+                # ==========================
+                # CALLBACK HANDLER (PILIH BAHASA)
+                # ==========================
+                if is_callback:
+                    if callback_data in ["lang_id", "lang_en"]:
+                        lang = "id" if callback_data == "lang_id" else "en"
+                        USER_LANG[user_id] = lang
+                        log_terminal(f"User @{username} switched language to {lang.upper()}", "INFO")
+                        edit_message(chat_id, message_id, LANG_DICT[lang]["help"])
+                    continue
 
-    # =========================================================
-    # 🧠 LOGIKA DYNAMIC DAYS BERDASARKAN JUMLAH TUGAS (CRON MODE)
-    # =========================================================
-    all_tasks = []
-    for t_idx in range(len(tokens)):
-        for r_idx in range(len(TARGETS)):
-            all_tasks.append((t_idx, r_idx))
+                if not text: continue
 
-    total_tasks = len(all_tasks)
-    target_days = 4 + (total_tasks // 100) if total_tasks >= 100 else 5
-        
-    total_runs_target = target_days * 24
-    run_number = int(os.environ.get("GITHUB_RUN_NUMBER", 1))
-    current_run_in_cycle = ((run_number - 1) % total_runs_target) + 1
-    
-    task_start = int((current_run_in_cycle - 1) * total_tasks / total_runs_target)
-    task_end = int(current_run_in_cycle * total_tasks / total_runs_target)
-    tasks_to_process = task_end - task_start
+                if ASCII_TIMER is None:
+                    cmd_name = text.split()[0] if text.startswith("/") else "Interactive Reply"
+                    log_terminal(f"Received input from @{username} ({lang.upper()}): {cmd_name}", "INFO")
 
-    if tasks_to_process == 0: sys.exit(0)
+                # ==========================
+                # MENU UTAMA & PILIH BAHASA
+                # ==========================
+                if text == "/start" or text == "/help":
+                    markup = {
+                        "inline_keyboard": [
+                            [
+                                {"text": "🇮🇩 Indonesia", "callback_data": "lang_id"},
+                                {"text": "🇬🇧 English", "callback_data": "lang_en"}
+                            ]
+                        ]
+                    }
+                    send_message(chat_id, "🌐 <b>Select Language / Pilih Bahasa:</b>", reply_markup=markup)
+                    continue
 
-    for i in range(task_start, task_end):
-        token_idx, target_idx = all_tasks[i]
-        selected_token = tokens[token_idx]
-        selected_target = TARGETS[target_idx]
-        target_url = f"https://github.com/{selected_target}"
-        time_str = get_now_wib().strftime('%d/%m/%Y %H:%M:%S WIB')
-        token_preview = selected_token[-6:]
-        selected_quote = QUOTES[i % len(QUOTES)]
-        
-        current_step = (i - task_start) + 1
-        
-        progress_pct = int(((current_step - 1) / tasks_to_process) * 100)
-        bar = "█" * int(progress_pct / 10) + "░" * (10 - int(progress_pct / 10))
-        
-        init_msg = (f"╔════════════════════╗\n"
-                    f" ⏳ <b>PREPARING WORKER...</b>\n"
-                    f"╚════════════════════╝\n\n"
-                    f"<i>Establishing secure connection to GitHub API...</i>\n"
-                    f"══════════════════════\n"
-                    f"🎯 <b>{TARGET_LABEL} :</b> <a href='{target_url}'>{selected_target}</a>\n"
-                    f"🤖 <b>Node   :</b> #{token_idx + 1} ({token_preview})\n"
-                    f"📊 <b>Proses :</b> <code>[{bar}] {progress_pct}%</code>\n"
-                    f"🔢 <b>Status :</b> {current_step - 1} dari {tasks_to_process} Selesai\n\n"
-                    f"🛡️ <i>Engineered by Abie Haryatmo</i>")
-        sent_msgs = send_telegram_notification(init_msg)
-        
-        is_skipped, result = do_action(selected_token, selected_target, token_idx, sent_msgs, current_step, tasks_to_process)
-        
-        final_pct = int((current_step / tasks_to_process) * 100)
-        final_bar = "█" * int(final_pct / 10) + "░" * (10 - int(final_pct / 10))
-        
-        final_msg = (
-            f"╔════════════════════╗\n"
-            f" 🚀 <b>DEPLOYMENT SUCCESS</b>\n"
-            f"╚════════════════════╝\n\n"
-            f"{result}\n"
-            f"══════════════════════\n"
-            f"🎯 <b>{TARGET_LABEL} :</b> <a href='{target_url}'>{selected_target}</a>\n"
-            f"🤖 <b>Node   :</b> #{token_idx + 1} ({token_preview})\n"
-            f"📊 <b>Proses :</b> <code>[{final_bar}] {final_pct}%</code>\n"
-            f"⏱️ <b>Waktu  :</b> {time_str}\n\n"
-            f"#DevOpsMode #CloudAutomation\n"
-            f"<i>{selected_quote}</i>"
-        )
-        if sent_msgs: edit_telegram_notification(sent_msgs, final_msg)
-        
-        if i < task_end - 1:
-            if is_skipped: time.sleep(2) 
-            else: time.sleep(random.randint(20, 40))
+                # ==========================
+                # INTERACTIVE STATE HANDLER
+                # ==========================
+                if user_id in PENDING_STATES:
+                    state = PENDING_STATES[user_id]
+                    
+                    if text == "/cancel":
+                        del PENDING_STATES[user_id]
+                        log_terminal("Action Cancelled by user.", "INFO")
+                        send_message(user_id, lang_data["cancelled"])
+                        continue
+                        
+                    action = state.get('action')
+
+                    if action == 'wait_cloud_engine':
+                        engine_key = text.strip()
+                        if engine_key not in CLOUD_ENGINES:
+                            send_message(user_id, lang_data["err_invalid_engine"])
+                            continue
+                        
+                        state['engine'] = engine_key
+                        state['action'] = 'wait_cloud_target'
+                        engine_name = CLOUD_ENGINES[engine_key]['name']
+                        send_message(user_id, lang_data["prompt_target"].format(engine=engine_name))
+                        continue
+
+                    elif action == 'wait_cloud_target':
+                        target = text.strip()
+                        if "github.com/" in target: target = target.split("github.com/")[-1]
+                        target = target.split("?")[0].split("#")[0].strip("/")
+                        if target.endswith(".git"): target = target[:-4]
+                        
+                        state['target'] = target
+                        state['action'] = 'wait_cloud_qty'
+                        send_message(user_id, lang_data["prompt_qty"].format(service=state['service'].upper(), target=target))
+                        continue
+
+                    elif action == 'wait_cloud_qty':
+                        if not text.isdigit():
+                            send_message(user_id, lang_data["err_number"])
+                            continue
+                        state['quantity'] = int(text)
+                        state['action'] = 'wait_cloud_duration'
+                        send_message(user_id, lang_data["prompt_duration"])
+                        continue
+
+                    elif action == 'wait_cloud_duration':
+                        try: duration = float(text.replace(',', '.'))
+                        except:
+                            send_message(user_id, lang_data["err_number"])
+                            continue
+                        if duration <= 0:
+                            send_message(user_id, lang_data["err_duration"])
+                            continue
+                        state['duration'] = duration
+                        state['action'] = 'wait_cloud_index'
+                        send_message(user_id, lang_data["prompt_index"])
+                        continue
+
+                    elif action == 'wait_cloud_index':
+                        if not text.isdigit() or int(text) < 1:
+                            send_message(user_id, lang_data["err_number"])
+                            continue
+                        
+                        start_index = int(text)
+                        cmd_used = state['service']
+                        target = state['target']
+                        quantity = state['quantity']
+                        duration = state['duration']
+                        engine_id = state['engine']
+                        engine_name = CLOUD_ENGINES[engine_id]['name']
+                        
+                        del PENDING_STATES[user_id]
+                        send_message(user_id, lang_data["transmitting"].format(cmd=cmd_used.upper(), engine=engine_name))
+                        
+                        if cmd_used == "/allin":
+                            success_reports = []
+                            for action_name, yml_name in WORKFLOW_MAP.items():
+                                success, msg = trigger_github_workflow(engine_id, yml_name, target, quantity, duration, start_index)
+                                status_icon = "🟢" if success else "🔴"
+                                success_reports.append(f"{status_icon} <b>{action_name[1:].upper()}</b>: {msg}")
+                                time.sleep(1) 
+                            
+                            final_report = "\n".join(success_reports)
+                            result_msg = lang_data["parallel_deployed"].format(
+                                engine=engine_name, target=target, qty=quantity, dur=duration, index=start_index, status=final_report
+                            )
+                            send_message(user_id, result_msg)
+                            broadcast_message(result_msg, exclude_id=user_id)
+                        else:
+                            yaml_file = WORKFLOW_MAP.get(cmd_used, "auto_star.yml")
+                            success, msg = trigger_github_workflow(engine_id, yaml_file, target, quantity, duration, start_index)
+                            if success:
+                                log_terminal(f"Cloud Deployment: {cmd_used} for {target} on {engine_name}", "SUCCESS")
+                                result_msg = lang_data["cloud_deployed"].format(
+                                    engine=engine_name, cmd=cmd_used.upper(), target=target, qty=quantity, dur=duration, index=start_index
+                                )
+                                send_message(user_id, result_msg)
+                                broadcast_message(result_msg, exclude_id=user_id)
+                            else:
+                                log_terminal(f"Cloud Deployment Failed: {msg}", "ERROR")
+                                send_message(user_id, lang_data["cloud_failed"].format(msg=msg))
+                        continue
+
+                # ==========================
+                # TRIGGER MENU & ROUTING
+                # ==========================
+                cmd_used = None
+                for cmd in valid_cloud_commands:
+                    if text.startswith(cmd):
+                        cmd_used = cmd
+                        break
+                        
+                if cmd_used:
+                    PENDING_STATES[user_id] = {'action': 'wait_cloud_engine', 'service': cmd_used}
+                    engine_list = "\n".join([f"<b>{k}.</b> {v['name']}" for k, v in CLOUD_ENGINES.items()])
+                    
+                    msg_engine = lang_data["prompt_engine"].format(cmd=cmd_used.upper(), engine_list=engine_list)
+                    send_message(user_id, msg_engine)
+                    continue
+
+            time.sleep(2)
+        except KeyboardInterrupt:
+            if ASCII_TIMER is not None: ASCII_TIMER.cancel()
+            print(f"\n{C_RED}🛑 Bot stopped. Shutting down...{C_RESET}")
+            break
+        except Exception as e:
+            time.sleep(5)
 
 if __name__ == "__main__":
     main()
