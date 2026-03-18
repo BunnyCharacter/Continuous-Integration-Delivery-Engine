@@ -1,0 +1,45 @@
+name: Auto Follow Squad
+
+on:
+  workflow_dispatch: 
+    inputs:
+      target:
+        description: 'Target User (Username)'
+        required: true
+      quantity:
+        description: 'Jumlah eksekusi'
+        required: true
+      duration:
+        description: 'Durasi pengerjaan dalam jam'
+        required: true
+      start_index:
+        description: 'Mulai dari token urutan ke berapa'
+        required: true
+
+jobs:
+  execute-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Packages
+        run: pip install requests
+
+      - name: 🚀 RUN FOLLOW SQUAD
+        env:
+          WORKER_TOKENS: ${{ secrets.WORKER_TOKENS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ACTION_TYPE: "FOLLOW"
+          # Perhatikan! Khusus Follow, variabelnya namanya TARGET_USERS
+          TARGET_USERS: ${{ github.event.inputs.target }}
+          INPUT_QTY: ${{ github.event.inputs.quantity }}
+          INPUT_DUR: ${{ github.event.inputs.duration }}
+          INPUT_START: ${{ github.event.inputs.start_index }}
+        run: python -u auto.py
