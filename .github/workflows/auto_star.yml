@@ -13,7 +13,7 @@ on:
         description: 'Durasi pengerjaan dalam jam'
         required: true
       start_index:
-        description: 'Mulai dari token urutan ke berapa di Secrets'
+        description: 'Mulai dari token urutan ke berapa'
         required: true
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
           WORKER_TOKENS: ${{ secrets.WORKER_TOKENS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          # 🎯 Mengambil semua parameter dari sinyal Telegram
+          ACTION_TYPE: "STARS"
           TARGET_REPOS: ${{ github.event.inputs.target }}
           INPUT_QTY: ${{ github.event.inputs.quantity }}
           INPUT_DUR: ${{ github.event.inputs.duration }}
