@@ -3,7 +3,6 @@ import requests
 import time
 import sys
 import random
-import re
 from datetime import datetime, timedelta, timezone
 
 def get_now_wib():
@@ -15,27 +14,15 @@ def get_now_wib():
 # ==========================================
 RAW_ACTION = os.environ.get("ACTION_TYPE", "").strip().upper()
 
-# Normalisasi ACTION_TYPE agar tahan banting dari typo
-if "FOLLOW" in RAW_ACTION:
-    ACTION_TYPE = "FOLLOW"
-elif "STAR" in RAW_ACTION:
-    ACTION_TYPE = "STARS"
-elif "FORK" in RAW_ACTION:
-    ACTION_TYPE = "FORKS"
-elif "WATCH" in RAW_ACTION:
-    ACTION_TYPE = "WATCH"
-else:
-    ACTION_TYPE = RAW_ACTION
+if "FOLLOW" in RAW_ACTION: ACTION_TYPE = "FOLLOW"
+elif "STAR" in RAW_ACTION: ACTION_TYPE = "STARS"
+elif "FORK" in RAW_ACTION: ACTION_TYPE = "FORKS"
+elif "WATCH" in RAW_ACTION: ACTION_TYPE = "WATCH"
+else: ACTION_TYPE = RAW_ACTION
 
 if not ACTION_TYPE:
     print("❌ CRITICAL ERROR: Sinyal 'ACTION_TYPE' tidak ditemukan di file .yml!")
     sys.exit(1)
-
-print("="*50)
-print("🚀 XIANBEE CORP-SEC ENGINE STARTING")
-print("="*50)
-print(f"🎯 DIRECTIVE : {ACTION_TYPE}")
-print("="*50)
 
 # ==========================================
 # 🎯 MENYIAPKAN TARGET & KUOTA
@@ -52,23 +39,12 @@ INPUT_QTY = int(os.environ.get("INPUT_QTY", 0))
 INPUT_DUR = float(os.environ.get("INPUT_DUR", 0))
 
 # ==========================================
-# 🎨 FUNGSI AUTO-PADDING (BOX MAKER)
+# 🎨 FORMAT UI (MOBILE SAFE)
 # ==========================================
-W = 38 # Lebar dalam kotak
-TOP = f"╔{'═'*W}╗"
-MID = f"╠{'═'*W}╣"
-BOT = f"╚{'═'*W}╝"
+L_TOP = "╔════════════════════════════════"
+L_MID = "╠════════════════════════════════"
+L_BOT = "╚════════════════════════════════"
 
-def bl(text):
-    """Fungsi untuk membuat baris kotak dengan spasi otomatis (biar ujung kanan rata)"""
-    # Menghapus tag HTML sementara untuk menghitung panjang karakter asli
-    clean_text = re.sub(r'<[^>]+>', '', text)
-    pad_len = max(0, W - len(clean_text))
-    return f"║ {text}{' ' * pad_len} ║"
-
-# ==========================================
-# ⚙️ FUNGSI TELEGRAM & API
-# ==========================================
 def send_telegram_notification(message):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_ids_raw = os.environ.get("TELEGRAM_CHAT_ID")
@@ -137,7 +113,6 @@ def main():
     all_tokens = [t.strip() for t in tokens_raw.splitlines() if t.strip()]
     
     if not all_tokens or not TARGETS:
-        print("❌ ERROR: Tokens atau Target kosong. Exiting...")
         sys.exit(1)
 
     if "," in RAW_START:
@@ -148,41 +123,32 @@ def main():
         tokens_to_use = [(start_idx + i, all_tokens[start_idx + i]) for i in range(INPUT_QTY) if 0 <= start_idx + i < len(all_tokens)]
 
     if not tokens_to_use:
-        print("❌ ERROR: Tidak ada token yang valid untuk format urutan tersebut. Exiting...")
         sys.exit(1)
 
     selected_target = TARGETS[0]
-    # Memotong string agar kotak tidak jebol
-    disp_target = selected_target if len(selected_target) <= 18 else selected_target[:16] + ".."
-    
     base_delay = (INPUT_DUR * 3600) / max(1, len(tokens_to_use))
     
     idx_list = [str(idx + 1) for idx, _ in tokens_to_use]
     if len(idx_list) > 3 and idx_list == [str(i) for i in range(int(idx_list[0]), int(idx_list[-1])+1)]:
-        info_str = f"{len(tokens_to_use)} Nodes (#{idx_list[0]}-#{idx_list[-1]})"
+        worker_info = f"{len(tokens_to_use)} Nodes (#{idx_list[0]}-#{idx_list[-1]})"
     else:
-        info_str = f"{len(tokens_to_use)} Nodes ({','.join(idx_list)})"
+        worker_info = f"{len(tokens_to_use)} Nodes ({','.join(idx_list)})"
     
-    worker_info = info_str if len(info_str) <= 20 else info_str[:18] + ".."
-    
-    # 1. PESAN AWAL (INIT) - FULL BOX
-    msg1 = [
-        TOP,
-        bl("🔴 <b>RESTRICTED CORP-SEC</b>"),
-        MID,
-        bl(f"❖ <b>DIRECTIVE</b>: {ACTION_TYPE}_INJECT"),
-        bl(f"❖ <b>ASSET ID</b> : <a href='https://github.com/{selected_target}'>{disp_target}</a>"),
-        bl(f"❖ <b>OPERATIVE</b>: {worker_info}"),
-        bl(f"❖ <b>THROTTLE</b> : {INPUT_DUR} Hrs/Unit"),
-        MID,
-        bl("🛡️ <i>Eng. by Abie Haryatmo</i>"),
-        bl("🤝 <b>XianBee Tech Store</b>"),
-        MID,
-        bl("<i>> Bypassing ICE...</i>"),
-        bl("<code>ADMIN@CORP-SEC:~$ auth</code>"),
-        BOT
-    ]
-    pre_msg = "\n".join(msg1)
+    # 1. PESAN AWAL (INIT)
+    pre_msg = (f"{L_TOP}\n"
+               f"║ 🔴 <b>RESTRICTED CORP-SEC</b>\n"
+               f"{L_MID}\n"
+               f"║ ❖ <b>DIRECTIVE</b> : {ACTION_TYPE}_INJECT\n"
+               f"║ ❖ <b>ASSET ID</b>  : <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
+               f"║ ❖ <b>OPERATIVE</b> : {worker_info}\n"
+               f"║ ❖ <b>THROTTLE</b>  : {INPUT_DUR} Hrs/Unit\n"
+               f"{L_MID}\n"
+               f"║ 🛡️ <i>Eng. by Abie Haryatmo</i>\n"
+               f"║ 🤝 <b>XianBee Tech Store</b>\n"
+               f"{L_MID}\n"
+               f"║ <i>> Bypassing ICE...</i>\n"
+               f"║ <code>ADMIN@CORP-SEC:~$ auth</code>\n"
+               f"{L_BOT}")
     send_telegram_notification(pre_msg)
 
     success_count = 0
@@ -190,94 +156,80 @@ def main():
     for step_i, (real_idx, token) in enumerate(tokens_to_use):
         clean_token = token[4:] if token.startswith("ghp_") else token
         token_preview = f"{clean_token[:5]}...{clean_token[-4:]}"
-        print(f"[{step_i+1}/{len(tokens_to_use)}] Processing Node #{real_idx + 1}: {token_preview}")
         
         progress_pct = int((step_i / len(tokens_to_use)) * 100)
         bar = "▓" * (progress_pct // 10) + "░" * (10 - (progress_pct // 10))
         
-        # 2. PESAN PROGRESS (LIVE) - FULL BOX
-        msg2 = [
-            TOP,
-            bl("🟡 <b>OPERATION IN PROGRESS</b>"),
-            MID,
-            bl(f"❖ <b>ASSET ID</b>: <a href='https://github.com/{selected_target}'>{disp_target}</a>"),
-            bl(f"❖ <b>UNIT</b>    : #{real_idx + 1} ({token_preview})"),
-            bl(f"❖ <b>QUEUE</b>   : SEQ {step_i}/{len(tokens_to_use)}"),
-            bl(f"❖ <b>SYS LOAD</b>: [{bar}] {progress_pct}%"),
-            MID,
-            bl("🛡️ <i>Eng. by Abie Haryatmo</i>"),
-            bl("🤝 <b>XianBee Tech Store</b>"),
-            MID,
-            bl("<i>> Deploying payload...</i>"),
-            bl("<code>ADMIN@CORP-SEC:~$ monitor</code>"),
-            BOT
-        ]
-        msg_live = "\n".join(msg2)
+        # 2. PESAN PROGRESS (LIVE)
+        msg_live = (f"{L_TOP}\n"
+                    f"║ 🟡 <b>OPERATION IN PROGRESS</b>\n"
+                    f"{L_MID}\n"
+                    f"║ ❖ <b>ASSET ID</b> : <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
+                    f"║ ❖ <b>UNIT</b>     : #{real_idx + 1} (<code>{token_preview}</code>)\n"
+                    f"║ ❖ <b>QUEUE</b>    : SEQ {step_i}/{len(tokens_to_use)}\n"
+                    f"║ ❖ <b>SYS LOAD</b> : <code>[{bar}] {progress_pct}%</code>\n"
+                    f"{L_MID}\n"
+                    f"║ 🛡️ <i>Eng. by Abie Haryatmo</i>\n"
+                    f"║ 🤝 <b>XianBee Tech Store</b>\n"
+                    f"{L_MID}\n"
+                    f"║ <i>> Deploying payload...</i>\n"
+                    f"║ <code>ADMIN@CORP-SEC:~$ monitor</code>\n"
+                    f"{L_BOT}")
+        
         sent_msgs = send_telegram_notification(msg_live)
 
         is_skipped = check_existing(token, selected_target, ACTION_TYPE)
         if is_skipped:
             res_msg = "ALREADY INJECTED"
             success_count += 1
-            print(f" -> ⏭️ SKIPPED: Node #{real_idx + 1} ({token_preview}) already executed this target.")
             status_text = "🟡 <b>CACHE HIT (SKIPPED)</b>"
         else:
             success, info = perform_api_action(token, selected_target, ACTION_TYPE)
             if success: success_count += 1
             res_msg = info
-            print(f" -> {res_msg} [Executed by Node #{real_idx + 1} | {token_preview}]")
             status_text = "🟢 <b>TRANSACTION LOGGED</b>" if success else "🔴 <b>TRANSACTION FAILED</b>"
 
         final_pct = int(((step_i + 1) / len(tokens_to_use)) * 100)
         final_bar = "▓" * (final_pct // 10) + "░" * (10 - (final_pct // 10))
-        disp_info = res_msg if len(res_msg) <= 18 else res_msg[:16] + ".."
         
-        # 3. PESAN SELESAI 1 NODE - FULL BOX
-        msg3 = [
-            TOP,
-            bl(status_text),
-            MID,
-            bl(f"❖ <b>VALIDATION</b>: {disp_info}"),
-            bl(f"❖ <b>ASSET ID</b>  : <a href='https://github.com/{selected_target}'>{disp_target}</a>"),
-            bl(f"❖ <b>UNIT</b>      : #{real_idx + 1} ({token_preview})"),
-            bl(f"❖ <b>SYS LOAD</b>  : [{final_bar}] {final_pct}%"),
-            bl(f"❖ <b>TIMESTAMP</b> : {get_now_wib().strftime('%H:%M:%S')}"),
-            MID,
-            bl("🛡️ <i>Eng. by Abie Haryatmo</i>"),
-            bl("🤝 <b>XianBee Tech Store</b>"),
-            MID,
-            bl("<i>> Sync complete.</i>"),
-            bl("<code>ADMIN@CORP-SEC:~$ verify</code>"),
-            BOT
-        ]
-        msg_done = "\n".join(msg3)
+        # 3. PESAN SELESAI 1 NODE
+        msg_done = (f"{L_TOP}\n"
+                    f"║ {status_text}\n"
+                    f"{L_MID}\n"
+                    f"║ ❖ <b>VALIDATION</b> : {res_msg}\n"
+                    f"║ ❖ <b>ASSET ID</b>   : <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
+                    f"║ ❖ <b>UNIT</b>       : #{real_idx + 1} (<code>{token_preview}</code>)\n"
+                    f"║ ❖ <b>SYS LOAD</b>   : <code>[{final_bar}] {final_pct}%</code>\n"
+                    f"║ ❖ <b>TIMESTAMP</b>  : {get_now_wib().strftime('%H:%M:%S WIB')}\n"
+                    f"{L_MID}\n"
+                    f"║ 🛡️ <i>Eng. by Abie Haryatmo</i>\n"
+                    f"║ 🤝 <b>XianBee Tech Store</b>\n"
+                    f"{L_MID}\n"
+                    f"║ <i>> Sync complete.</i>\n"
+                    f"║ <code>ADMIN@CORP-SEC:~$ verify</code>\n"
+                    f"{L_BOT}")
+        
         edit_telegram_notification(sent_msgs, msg_done)
 
         if step_i < len(tokens_to_use) - 1:
             delay = random.uniform(base_delay * 0.8, base_delay * 1.2)
-            print(f" -> Sleeping for {int(delay)} seconds...")
             time.sleep(delay)
 
-    # 4. PESAN REKAPITULASI AKHIR - FULL BOX
-    msg4 = [
-        TOP,
-        bl("🏁 <b>DAEMON TERMINATED</b>"),
-        MID,
-        bl(f"❖ <b>JOB NAME</b> : {ACTION_TYPE}_INJECT"),
-        bl(f"❖ <b>ASSET ID</b> : <a href='https://github.com/{selected_target}'>{disp_target}</a>"),
-        bl(f"❖ <b>EXIT CODE</b>: {success_count}/{len(tokens_to_use)} SUCCESS"),
-        MID,
-        bl("🛡️ <i>Eng. by Abie Haryatmo</i>"),
-        bl("🤝 <b>XianBee Tech Store</b>"),
-        MID,
-        bl("<i>> Shutting down uplink...</i>"),
-        bl("<code>ADMIN@CORP-SEC:~$ exit 0</code>"),
-        BOT
-    ]
-    final_report = "\n".join(msg4)
+    # 4. PESAN REKAPITULASI AKHIR
+    final_report = (f"{L_TOP}\n"
+                    f"║ 🏁 <b>DAEMON TERMINATED</b>\n"
+                    f"{L_MID}\n"
+                    f"║ ❖ <b>JOB NAME</b>  : {ACTION_TYPE}_INJECT\n"
+                    f"║ ❖ <b>ASSET ID</b>  : <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
+                    f"║ ❖ <b>EXIT CODE</b> : {success_count}/{len(tokens_to_use)} SUCCESS\n"
+                    f"{L_MID}\n"
+                    f"║ 🛡️ <i>Eng. by Abie Haryatmo</i>\n"
+                    f"║ 🤝 <b>XianBee Tech Store</b>\n"
+                    f"{L_MID}\n"
+                    f"║ <i>> Shutting down uplink...</i>\n"
+                    f"║ <code>ADMIN@CORP-SEC:~$ exit 0</code>\n"
+                    f"{L_BOT}")
     send_telegram_notification(final_report)
-    print("="*50)
-    print("✅ EXECUTION COMPLETE!")
 
 if __name__ == "__main__":
     main()
