@@ -12,7 +12,21 @@ def get_now_wib():
 # ==========================================
 # 🎯 MENGAMBIL PARAMETER DARI GITHUB ACTIONS
 # ==========================================
-ACTION_TYPE = os.environ.get("ACTION_TYPE", "").strip().upper()
+RAW_ACTION = os.environ.get("ACTION_TYPE", "").strip().upper()
+
+# PERBAIKAN: Normalisasi ACTION_TYPE agar tahan banting dari typo atau format berbeda
+# Jika dari YML terkirim "FOLLOWERS" atau "/FOLLOW", akan diseragamkan jadi "FOLLOW"
+if "FOLLOW" in RAW_ACTION:
+    ACTION_TYPE = "FOLLOW"
+elif "STAR" in RAW_ACTION:
+    ACTION_TYPE = "STARS"
+elif "FORK" in RAW_ACTION:
+    ACTION_TYPE = "FORKS"
+elif "WATCH" in RAW_ACTION:
+    ACTION_TYPE = "WATCH"
+else:
+    ACTION_TYPE = RAW_ACTION
+
 if not ACTION_TYPE:
     print("❌ CRITICAL ERROR: Sinyal 'ACTION_TYPE' tidak ditemukan di file .yml!")
     sys.exit(1)
@@ -67,11 +81,12 @@ T = UI.get(LANG, UI["id"])
 # ==========================================
 # 🎯 MENYIAPKAN TARGET & KUOTA
 # ==========================================
+# PERBAIKAN: Menambahkan fallback os.environ jaga-jaga kalau target ditaruh di TARGET_REPOS
 if ACTION_TYPE == "FOLLOW":
-    RAW_TARGETS = os.environ.get("TARGET_USERS", "")
+    RAW_TARGETS = os.environ.get("TARGET_USERS", "") or os.environ.get("TARGET_REPOS", "")
     TARGET_LABEL = T["target_user"]
 else:
-    RAW_TARGETS = os.environ.get("TARGET_REPOS", "")
+    RAW_TARGETS = os.environ.get("TARGET_REPOS", "") or os.environ.get("TARGET_USERS", "")
     TARGET_LABEL = T["target_repo"]
 
 TARGETS = [t.strip() for t in RAW_TARGETS.split(",") if t.strip()]
