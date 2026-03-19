@@ -139,16 +139,16 @@ def perform_api_action(token, target, action_type):
     try:
         if action_type == "STARS":
             res = requests.put(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10)
-            return (res.status_code == 204), f"Code: {res.status_code}"
+            return (res.status_code == 204), "STAR SUCCESS" if res.status_code == 204 else f"Failed ({res.status_code})"
         elif action_type == "FORKS":
             res = requests.post(f"https://api.github.com/repos/{target}/forks", headers=headers, timeout=10)
-            return (res.status_code in [201, 202]), f"Code: {res.status_code}"
+            return (res.status_code in [201, 202]), "FORK SUCCESS (Accepted)" if res.status_code in [201, 202] else f"Failed ({res.status_code})"
         elif action_type == "WATCH":
             res = requests.put(f"https://api.github.com/repos/{target}/subscription", headers=headers, json={"subscribed": True}, timeout=10)
-            return (res.status_code == 200), f"Code: {res.status_code}"
+            return (res.status_code == 200), "WATCH SUCCESS" if res.status_code == 200 else f"Failed ({res.status_code})"
         elif action_type == "FOLLOW":
             res = requests.put(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
-            return (res.status_code == 204), f"Code: {res.status_code}"
+            return (res.status_code == 204), "FOLLOW SUCCESS" if res.status_code == 204 else f"Failed ({res.status_code})"
     except: return False, "Error Connection"
     return False, "Unknown Error"
 
@@ -162,11 +162,9 @@ def main():
 
     # 🧠 LOGIKA PENYARINGAN TOKEN TERBARU (SUPPORT BERBAGAI FORMAT)
     if "," in RAW_START:
-        # Jika mengandung koma (misal: "1, 3, 5" atau "1,2,3,4,5,6,7,8,9,10")
         indices = [int(x.strip()) - 1 for x in RAW_START.split(",") if x.strip().isdigit()]
         tokens_to_use = [(i, all_tokens[i]) for i in indices if 0 <= i < len(all_tokens)]
     else:
-        # Jika satu angka biasa (misal: "5")
         start_idx = max(0, int(RAW_START) - 1)
         tokens_to_use = [(start_idx + i, all_tokens[start_idx + i]) for i in range(INPUT_QTY) if 0 <= start_idx + i < len(all_tokens)]
 
@@ -177,7 +175,6 @@ def main():
     selected_target = TARGETS[0]
     base_delay = (INPUT_DUR * 3600) / max(1, len(tokens_to_use))
     
-    # Menentukan detail pekerja yang aktif (Contoh: Index #1 - #10 atau #1, #3, #5)
     idx_list = [str(idx + 1) for idx, _ in tokens_to_use]
     if len(idx_list) > 3 and idx_list == [str(i) for i in range(int(idx_list[0]), int(idx_list[-1])+1)]:
         worker_info = f"{len(tokens_to_use)} Nodes (Index: #{idx_list[0]} - #{idx_list[-1]})"
@@ -191,7 +188,8 @@ def main():
                f"🎯 <b>Target:</b> <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
                f"🤖 <b>Workers:</b> {worker_info}\n"
                f"⏳ <b>Pacing:</b> {INPUT_DUR} Hours\n\n"
-               f"🛡️ <i>Engineered by Abie Haryatmo</i>")
+               f"🛡️ <i>Engineered by Abie Haryatmo</i>\n"
+               f"🤝 <b>Powered by XianBee Tech Store</b>")
     send_telegram_notification(pre_msg)
 
     success_count = 0
@@ -210,7 +208,8 @@ def main():
                     f"🤖 <b>{T['node']}   :</b> #{real_idx + 1} ({token_preview})\n"
                     f"📊 <b>{T['progress']} :</b> <code>[{bar}] {progress_pct}%</code>\n"
                     f"🔢 <b>Status :</b> {T['status'].format(current=step_i, total=len(tokens_to_use))}\n\n"
-                    f"🛡️ <i>Engineered by Abie Haryatmo</i>")
+                    f"🛡️ <i>Engineered by Abie Haryatmo</i>\n"
+                    f"🤝 <b>Powered by XianBee Tech Store</b>")
         
         sent_msgs = send_telegram_notification(msg_live)
 
@@ -218,12 +217,12 @@ def main():
         if is_skipped:
             res_msg = T["skipped"]
             success_count += 1
-            print(f" -> SKIPPED (Already executed)")
+            print(f" -> ⏭️ SKIPPED: Node #{real_idx + 1} ({token_preview}) already executed this target.")
         else:
             success, info = perform_api_action(token, selected_target, ACTION_TYPE)
             if success: success_count += 1
             res_msg = f"✅ SUCCESS: {info}" if success else f"❌ FAILED: {info}"
-            print(f" -> {res_msg}")
+            print(f" -> {res_msg} [Executed by Node #{real_idx + 1} | {token_preview}]")
 
         final_pct = int(((step_i + 1) / len(tokens_to_use)) * 100)
         final_bar = "█" * (final_pct // 10) + "░" * (10 - (final_pct // 10))
@@ -237,7 +236,9 @@ def main():
                     f"📊 <b>{T['progress']} :</b> <code>[{final_bar}] {final_pct}%</code>\n"
                     f"⏱️ <b>{T['time']}   :</b> {get_now_wib().strftime('%H:%M:%S WIB')}\n\n"
                     f"#CloudAutomation\n"
-                    f"<i>{selected_quote}</i>")
+                    f"<i>{selected_quote}</i>\n\n"
+                    f"🛡️ <i>Engineered by Abie Haryatmo</i>\n"
+                    f"🤝 <b>Powered by XianBee Tech Store</b>")
         
         edit_telegram_notification(sent_msgs, msg_done)
 
@@ -252,7 +253,8 @@ def main():
                     f"<b>Action:</b> {ACTION_TYPE} INJECTION\n"
                     f"<b>Target:</b> <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
                     f"<b>Result:</b> {success_count}/{len(tokens_to_use)} Success\n\n"
-                    f"🛡️ <i>Engineered by Abie Haryatmo</i>")
+                    f"🛡️ <i>Engineered by Abie Haryatmo</i>\n"
+                    f"🤝 <b>Powered by XianBee Tech Store</b>")
     send_telegram_notification(final_report)
     print("="*50)
     print("✅ EXECUTION COMPLETE!")
