@@ -5,21 +5,18 @@ import sys
 import random
 from datetime import datetime, timedelta, timezone
 
-# Fungsi untuk mengambil waktu WIB untuk laporan di Telegram
 def get_now_wib():
     tz_wib = timezone(timedelta(hours=7))
     return datetime.now(tz_wib)
 
 # ==========================================
-# 🎯 TAHAP 1: MENGAMBIL SINYAL DARI GITHUB ACTIONS
+# 🎯 MENGAMBIL PARAMETER DARI GITHUB ACTIONS
 # ==========================================
-# Menangkap sinyal ACTION_TYPE dari file .yml (Apakah ini minta STARS, FORKS, dll?)
 ACTION_TYPE = os.environ.get("ACTION_TYPE", "").strip().upper()
 if not ACTION_TYPE:
     print("❌ CRITICAL ERROR: Sinyal 'ACTION_TYPE' tidak ditemukan di file .yml!")
     sys.exit(1)
 
-# Menangkap sinyal Bahasa dari Bot Telegram lu
 raw_lang = os.environ.get("INPUT_LANG", "id").strip().lower()
 LANG = raw_lang if raw_lang in ["id", "en"] else "id"
 
@@ -31,9 +28,8 @@ print(f"🗣️ BAHASA UI    : {LANG.upper()}")
 print("="*50)
 
 # ==========================================
-# 🌍 TAHAP 2: KAMUS BAHASA (BILINGUAL)
+# 🌍 KAMUS BAHASA (BILINGUAL)
 # ==========================================
-# Ini yang mengatur agar loading screen Telegram berubah sesuai bahasa yang dipilih Klien
 UI = {
     "id": {
         "live": "EKSEKUSI LIVE",
@@ -69,9 +65,8 @@ UI = {
 T = UI.get(LANG, UI["id"])
 
 # ==========================================
-# 🎯 TAHAP 3: MENYIAPKAN TARGET & KUOTA
+# 🎯 MENYIAPKAN TARGET & KUOTA
 # ==========================================
-# Cek apakah ini minta Follower (Target User) atau yang lain (Target Repo)
 if ACTION_TYPE == "FOLLOW":
     RAW_TARGETS = os.environ.get("TARGET_USERS", "")
     TARGET_LABEL = T["target_user"]
@@ -80,9 +75,11 @@ else:
     TARGET_LABEL = T["target_repo"]
 
 TARGETS = [t.strip() for t in RAW_TARGETS.split(",") if t.strip()]
+
+# 🧠 MENANGKAP FORMAT STRING (KOMAAAN / RANGE) DARI TELEGRAM
+RAW_START = str(os.environ.get("INPUT_START", "1")).strip()
 INPUT_QTY = int(os.environ.get("INPUT_QTY", 0))
 INPUT_DUR = float(os.environ.get("INPUT_DUR", 0))
-INPUT_START = int(os.environ.get("INPUT_START", 1))
 
 QUOTES = [
     '"Talk is cheap. Show me the code." – Linus Torvalds',
@@ -92,11 +89,7 @@ QUOTES = [
     '"Clean code always looks like it was written by someone who cares." – Robert C. Martin'
 ]
 
-# ==========================================
-# 📱 TAHAP 4: FUNGSI KOMUNIKASI KE TELEGRAM
-# ==========================================
 def send_telegram_notification(message):
-    """Kirim pesan baru ke Telegram (Untuk Header Awal & Akhir)"""
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_ids_raw = os.environ.get("TELEGRAM_CHAT_ID")
     if not bot_token or not chat_ids_raw: return {}
@@ -113,7 +106,6 @@ def send_telegram_notification(message):
     return sent_messages
 
 def edit_telegram_notification(sent_messages, new_message):
-    """Edit pesan yang sudah ada di Telegram (Untuk Update Loading Bar)"""
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not bot_token or not sent_messages: return
     for chat_id, msg_id in sent_messages.items():
@@ -122,11 +114,7 @@ def edit_telegram_notification(sent_messages, new_message):
         try: requests.post(url, json=payload, timeout=15)
         except: pass
 
-# ==========================================
-# 🧠 TAHAP 5: FUNGSI INTI GITHUB API
-# ==========================================
 def check_existing(token, target, action_type):
-    """Fungsi Pengecekan: Memastikan token belum pernah melakukan aksi ini ke target."""
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
     try:
         if action_type == "STARS":
@@ -147,7 +135,6 @@ def check_existing(token, target, action_type):
     return False
 
 def perform_api_action(token, target, action_type):
-    """Fungsi Penembak: Mengirim sinyal asli ke GitHub berdasarkan ACTION_TYPE."""
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json", "X-GitHub-Api-Version": "2022-11-28"}
     try:
         if action_type == "STARS":
@@ -165,26 +152,31 @@ def perform_api_action(token, target, action_type):
     except: return False, "Error Connection"
     return False, "Unknown Error"
 
-# ==========================================
-# 🚀 TAHAP 6: FUNGSI EKSEKUSI UTAMA (MAIN)
-# ==========================================
 def main():
-    # 1. Menarik & Memotong Token Sesuai Pesanan
     tokens_raw = os.environ.get("WORKER_TOKENS", "")
     all_tokens = [t.strip() for t in tokens_raw.splitlines() if t.strip()]
     
-    start_idx = INPUT_START - 1
-    tokens_to_use = all_tokens[start_idx:start_idx + INPUT_QTY]
-    
-    if not tokens_to_use or not TARGETS:
+    if not all_tokens or not TARGETS:
         print("❌ ERROR: Tokens atau Target kosong. Exiting...")
         sys.exit(1)
 
+    # 🧠 LOGIKA PENYARINGAN TOKEN TERBARU (SUPPORT BERBAGAI FORMAT)
+    if "," in RAW_START:
+        # Jika mengandung koma (misal: "1, 3, 5" atau "1,2,3,4,5,6,7,8,9,10")
+        indices = [int(x.strip()) - 1 for x in RAW_START.split(",") if x.strip().isdigit()]
+        tokens_to_use = [(i, all_tokens[i]) for i in indices if 0 <= i < len(all_tokens)]
+    else:
+        # Jika satu angka biasa (misal: "5")
+        start_idx = max(0, int(RAW_START) - 1)
+        tokens_to_use = [(start_idx + i, all_tokens[start_idx + i]) for i in range(INPUT_QTY) if 0 <= start_idx + i < len(all_tokens)]
+
+    if not tokens_to_use:
+        print("❌ ERROR: Tidak ada token yang valid untuk format urutan tersebut. Exiting...")
+        sys.exit(1)
+
     selected_target = TARGETS[0]
-    # Rumus Delay: Total Durasi (jam) diubah ke detik, lalu dibagi jumlah aksi
     base_delay = (INPUT_DUR * 3600) / max(1, len(tokens_to_use))
     
-    # 2. Mengirim Notifikasi "Mesin Bangun" ke Telegram
     pre_msg = (f"╔════════════════════╗\n"
                f" ⚙️ <b>{T['awake']}</b>\n"
                f"╚════════════════════╝\n\n"
@@ -197,31 +189,28 @@ def main():
 
     success_count = 0
     
-    # 3. Proses Looping: Nembak target satu per satu pakai token yang beda
-    for i, token in enumerate(tokens_to_use):
+    for step_i, (real_idx, token) in enumerate(tokens_to_use):
         token_preview = f"{token[:8]}...{token[-4:]}"
-        print(f"[{i+1}/{len(tokens_to_use)}] Processing Node: {token_preview}")
+        print(f"[{step_i+1}/{len(tokens_to_use)}] Processing Node #{real_idx + 1}: {token_preview}")
         
-        # --- UI LOADING SCREEN (Sedang Menyerang) ---
-        progress_pct = int((i / len(tokens_to_use)) * 100)
+        progress_pct = int((step_i / len(tokens_to_use)) * 100)
         bar = "█" * (progress_pct // 10) + "░" * (10 - (progress_pct // 10))
         
         msg_live = (f"╔════════════════════╗\n   ⏳ <b>{T['live']}</b>\n╚════════════════════╝\n\n"
                     f"🔄 <i>{T['deploying']}</i>\n"
                     f"══════════════════════\n"
                     f"🎯 <b>{TARGET_LABEL} :</b> {selected_target}\n"
-                    f"🤖 <b>{T['node']}   :</b> #{start_idx + i + 1} ({token_preview})\n"
+                    f"🤖 <b>{T['node']}   :</b> #{real_idx + 1} ({token_preview})\n"
                     f"📊 <b>{T['progress']} :</b> <code>[{bar}] {progress_pct}%</code>\n"
-                    f"🔢 <b>Status :</b> {T['status'].format(current=i, total=len(tokens_to_use))}\n\n"
+                    f"🔢 <b>Status :</b> {T['status'].format(current=step_i, total=len(tokens_to_use))}\n\n"
                     f"🛡️ <i>Engineered by Abie Haryatmo</i>")
         
         sent_msgs = send_telegram_notification(msg_live)
 
-        # --- EKSEKUSI API GITHUB ---
         is_skipped = check_existing(token, selected_target, ACTION_TYPE)
         if is_skipped:
             res_msg = T["skipped"]
-            success_count += 1 # Dihitung sukses karena tujuannya memang sudah tercapai
+            success_count += 1
             print(f" -> SKIPPED (Already executed)")
         else:
             success, info = perform_api_action(token, selected_target, ACTION_TYPE)
@@ -229,16 +218,15 @@ def main():
             res_msg = f"✅ SUCCESS: {info}" if success else f"❌ FAILED: {info}"
             print(f" -> {res_msg}")
 
-        # --- UI LOADING SCREEN (Hasil Eksekusi) ---
-        final_pct = int(((i + 1) / len(tokens_to_use)) * 100)
+        final_pct = int(((step_i + 1) / len(tokens_to_use)) * 100)
         final_bar = "█" * (final_pct // 10) + "░" * (10 - (final_pct // 10))
-        selected_quote = random.choice(QUOTES) # Mengambil kata mutiara acak
+        selected_quote = random.choice(QUOTES)
         
         msg_done = (f"╔════════════════════╗\n   🚀 <b>{T['success']}</b>\n╚════════════════════╝\n\n"
                     f"{res_msg}\n"
                     f"══════════════════════\n"
                     f"🎯 <b>{TARGET_LABEL} :</b> {selected_target}\n"
-                    f"🤖 <b>{T['node']}   :</b> #{start_idx + i + 1}\n"
+                    f"🤖 <b>{T['node']}   :</b> #{real_idx + 1}\n"
                     f"📊 <b>{T['progress']} :</b> <code>[{final_bar}] {final_pct}%</code>\n"
                     f"⏱️ <b>{T['time']}   :</b> {get_now_wib().strftime('%H:%M:%S WIB')}\n\n"
                     f"#CloudAutomation\n"
@@ -246,13 +234,11 @@ def main():
         
         edit_telegram_notification(sent_msgs, msg_done)
 
-        # --- JEDA WAKTU (Pacing Aman) ---
-        if i < len(tokens_to_use) - 1:
+        if step_i < len(tokens_to_use) - 1:
             delay = random.uniform(base_delay * 0.8, base_delay * 1.2)
             print(f" -> Sleeping for {int(delay)} seconds...")
             time.sleep(delay)
 
-    # 4. Mengirim Laporan Akhir Pesanan
     final_report = (f"╔════════════════════╗\n"
                     f" ✅ <b>{T['accomplished']}</b>\n"
                     f"╚════════════════════╝\n\n"
