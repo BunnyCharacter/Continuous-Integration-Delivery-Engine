@@ -177,12 +177,19 @@ def main():
     selected_target = TARGETS[0]
     base_delay = (INPUT_DUR * 3600) / max(1, len(tokens_to_use))
     
+    # Menentukan detail pekerja yang aktif (Contoh: Index #1 - #10 atau #1, #3, #5)
+    idx_list = [str(idx + 1) for idx, _ in tokens_to_use]
+    if len(idx_list) > 3 and idx_list == [str(i) for i in range(int(idx_list[0]), int(idx_list[-1])+1)]:
+        worker_info = f"{len(tokens_to_use)} Nodes (Index: #{idx_list[0]} - #{idx_list[-1]})"
+    else:
+        worker_info = f"{len(tokens_to_use)} Nodes (Index: {', '.join(idx_list)})"
+    
     pre_msg = (f"╔════════════════════╗\n"
                f" ⚙️ <b>{T['awake']}</b>\n"
                f"╚════════════════════╝\n\n"
                f"<i>Mode: {ACTION_TYPE} INJECTION</i>\n"
-               f"🎯 <b>Target:</b> {selected_target}\n"
-               f"🤖 <b>Nodes :</b> {len(tokens_to_use)} Workers\n"
+               f"🎯 <b>Target:</b> <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
+               f"🤖 <b>Workers:</b> {worker_info}\n"
                f"⏳ <b>Pacing:</b> {INPUT_DUR} Hours\n\n"
                f"🛡️ <i>Engineered by Abie Haryatmo</i>")
     send_telegram_notification(pre_msg)
@@ -199,7 +206,7 @@ def main():
         msg_live = (f"╔════════════════════╗\n   ⏳ <b>{T['live']}</b>\n╚════════════════════╝\n\n"
                     f"🔄 <i>{T['deploying']}</i>\n"
                     f"══════════════════════\n"
-                    f"🎯 <b>{TARGET_LABEL} :</b> {selected_target}\n"
+                    f"🎯 <b>{TARGET_LABEL} :</b> <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
                     f"🤖 <b>{T['node']}   :</b> #{real_idx + 1} ({token_preview})\n"
                     f"📊 <b>{T['progress']} :</b> <code>[{bar}] {progress_pct}%</code>\n"
                     f"🔢 <b>Status :</b> {T['status'].format(current=step_i, total=len(tokens_to_use))}\n\n"
@@ -225,7 +232,7 @@ def main():
         msg_done = (f"╔════════════════════╗\n   🚀 <b>{T['success']}</b>\n╚════════════════════╝\n\n"
                     f"{res_msg}\n"
                     f"══════════════════════\n"
-                    f"🎯 <b>{TARGET_LABEL} :</b> {selected_target}\n"
+                    f"🎯 <b>{TARGET_LABEL} :</b> <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
                     f"🤖 <b>{T['node']}   :</b> #{real_idx + 1}\n"
                     f"📊 <b>{T['progress']} :</b> <code>[{final_bar}] {final_pct}%</code>\n"
                     f"⏱️ <b>{T['time']}   :</b> {get_now_wib().strftime('%H:%M:%S WIB')}\n\n"
@@ -243,7 +250,7 @@ def main():
                     f" ✅ <b>{T['accomplished']}</b>\n"
                     f"╚════════════════════╝\n\n"
                     f"<b>Action:</b> {ACTION_TYPE} INJECTION\n"
-                    f"<b>Target:</b> {selected_target}\n"
+                    f"<b>Target:</b> <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
                     f"<b>Result:</b> {success_count}/{len(tokens_to_use)} Success\n\n"
                     f"🛡️ <i>Engineered by Abie Haryatmo</i>")
     send_telegram_notification(final_report)
