@@ -1,4 +1,4 @@
-name: Auto Watch Squad
+name: Auto Watch Squad (Interactive)
 
 on:
   workflow_dispatch: 
@@ -13,8 +13,12 @@ on:
         description: 'Durasi pengerjaan dalam jam'
         required: true
       start_index:
-        description: 'Mulai dari token urutan ke berapa'
+        description: 'Mulai dari token urutan ke berapa (Mulai dari 0)'
         required: true
+      lang:
+        description: 'Bahasa output (id/en)'
+        required: false
+        default: 'id'
 
 jobs:
   execute-bot:
@@ -41,4 +45,5 @@ jobs:
           INPUT_QTY: ${{ github.event.inputs.quantity }}
           INPUT_DUR: ${{ github.event.inputs.duration }}
           INPUT_START: ${{ github.event.inputs.start_index }}
+          INPUT_LANG: ${{ github.event.inputs.lang }}
         run: python -u auto.py
