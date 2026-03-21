@@ -1,10 +1,10 @@
-name: Auto Star Squad (Interactive)
+name: 2. Auto Star (Interactive)
 
 on:
   workflow_dispatch: 
     inputs:
       target:
-        description: 'Target Repository (owner/repo)'
+        description: 'Target Repository (contoh: ithallodieh/immutable-bastion)'
         required: true
       quantity:
         description: 'Jumlah eksekusi'
@@ -13,12 +13,17 @@ on:
         description: 'Durasi pengerjaan dalam jam'
         required: true
       start_index:
-        description: 'Mulai dari token urutan ke berapa (Mulai dari 0)'
+        description: 'Mulai dari token urutan ke berapa (Mulai dari 1)'
         required: true
+        default: '1'
       lang:
         description: 'Bahasa output (id/en)'
         required: false
         default: 'id'
+      engine_name:
+        description: 'Nama Mesin (contoh: Engine 4)'
+        required: false
+        default: 'Engine 4'
 
 jobs:
   execute-bot:
@@ -35,15 +40,16 @@ jobs:
       - name: Install Packages
         run: pip install requests
 
-      - name: 🚀 RUN STAR SQUAD
+      - name: ⭐ RUN STAR SQUAD
         env:
           WORKER_TOKENS: ${{ secrets.WORKER_TOKENS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          ACTION_TYPE: "STARS"
+          ACTION_TYPE: "STAR"
           TARGET_REPOS: ${{ github.event.inputs.target }}
           INPUT_QTY: ${{ github.event.inputs.quantity }}
           INPUT_DUR: ${{ github.event.inputs.duration }}
           INPUT_START: ${{ github.event.inputs.start_index }}
           INPUT_LANG: ${{ github.event.inputs.lang }}
+          INPUT_ENGINE_NAME: ${{ github.event.inputs.engine_name }}
         run: python -u auto.py
