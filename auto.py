@@ -41,43 +41,26 @@ INPUT_QTY = int(os.environ.get("INPUT_QTY", 0))
 INPUT_DUR = float(os.environ.get("INPUT_DUR", 0))
 
 ENGINE_NAME = str(os.environ.get("INPUT_ENGINE_NAME", "Unknown Engine")).strip()
-INPUT_LANG = str(os.environ.get("INPUT_LANG", "id")).strip().lower()
 
 print(f"🎯 Target: {TARGETS} | Aksi: {ACTION_TYPE} | Engine: {ENGINE_NAME}")
 
 # ==========================================
-# 🌍 PENGATURAN BAHASA (ID / EN)
+# 🌍 PENGATURAN BAHASA (FULL ENGLISH)
 # ==========================================
-if INPUT_LANG == "en":
-    LBL_ENG, LBL_DIR, LBL_AST, LBL_OPR, LBL_THR, LBL_QUE, LBL_SYS = "ENGINE", "DIRECTIVE", "ASSET ID", "OPERATIVE", "THROTTLE", "PROG QUEUE", "SYS LOAD"
-    LBL_VAL, LBL_TIM, LBL_EXT = "VALIDATION", "TIME STAMP", "EXIT CODE"
-    TXT_HRS, TXT_SUCCESS = "Hrs / Unit", "SUCCESS"
-    HEAD_INIT = "🔴 <b>CORP-SEC ALERTS</b>"
-    HEAD_LIVE = "🟡 <b>INJECTION PROGRESS</b>"
-    HEAD_TERM = "🏁 <b>DAEMON TERMINATED</b>"
-    STAT_SKIP = "🟡 <b>CACHE HIT (SKIPPED)</b>"
-    STAT_SUCC = "🟢 <b>TRANSACTION LOGGED</b>"
-    STAT_FAIL = "🔴 <b>TRANSACTION FAILED</b>"
-    MSG_INIT_TXT = "Establishing secure uplink..."
-    MSG_LIVE_TXT = "Deploying payload to target..."
-    MSG_SYNC_TXT = "Checksum verified. Sync complete."
-    MSG_END_TXT  = "Operation concluded. Wiping logs..."
-    VAL_SKIP = "ALREADY INJECTED"
-else:
-    LBL_ENG, LBL_DIR, LBL_AST, LBL_OPR, LBL_THR, LBL_QUE, LBL_SYS = "MESIN", "ARAHAN", "ID ASET", "OPERATOR", "JEDA WAKTU", "ANTREAN", "BEBAN SYS"
-    LBL_VAL, LBL_TIM, LBL_EXT = "VALIDASI", "WAKTU", "KODE KELUAR"
-    TXT_HRS, TXT_SUCCESS = "Jam / Unit", "BERHASIL"
-    HEAD_INIT = "🔴 <b>PERINGATAN CORP-SEC</b>"
-    HEAD_LIVE = "🟡 <b>PROSES INJEKSI</b>"
-    HEAD_TERM = "🏁 <b>DAEMON DIHENTIKAN</b>"
-    STAT_SKIP = "🟡 <b>DILEWATI (SUDAH ADA)</b>"
-    STAT_SUCC = "🟢 <b>TRANSAKSI BERHASIL</b>"
-    STAT_FAIL = "🔴 <b>TRANSAKSI GAGAL</b>"
-    MSG_INIT_TXT = "Membangun koneksi aman..."
-    MSG_LIVE_TXT = "Mengirim muatan ke target..."
-    MSG_SYNC_TXT = "Ceksum valid. Sinkronisasi selesai."
-    MSG_END_TXT  = "Operasi selesai. Menghapus log..."
-    VAL_SKIP = "SUDAH DIINJEKSI"
+LBL_ENG, LBL_DIR, LBL_AST, LBL_OPR, LBL_THR, LBL_QUE, LBL_SYS = "ENGINE", "DIRECTIVE", "ASSET ID", "OPERATIVE", "THROTTLE", "PROG QUEUE", "SYS LOAD"
+LBL_VAL, LBL_TIM, LBL_EXT = "VALIDATION", "TIME STAMP", "EXIT CODE"
+TXT_HRS, TXT_SUCCESS = "Hrs / Unit", "SUCCESS"
+HEAD_INIT = "🔴 <b>CORP-SEC ALERTS</b>"
+HEAD_LIVE = "🟡 <b>INJECTION PROGRESS</b>"
+HEAD_TERM = "🏁 <b>DAEMON TERMINATED</b>"
+STAT_SKIP = "🟡 <b>CACHE HIT (SKIPPED)</b>"
+STAT_SUCC = "🟢 <b>TRANSACTION LOGGED</b>"
+STAT_FAIL = "🔴 <b>TRANSACTION FAILED</b>"
+MSG_INIT_TXT = "Establishing secure uplink..."
+MSG_LIVE_TXT = "Deploying payload to target..."
+MSG_SYNC_TXT = "Checksum verified. Sync complete."
+MSG_END_TXT  = "Operation concluded. Wiping logs..."
+VAL_SKIP = "ALREADY INJECTED"
 
 L_TOP = "╔════════════════════════════════╗"
 L_MID = "╠════════════════════════════════╣"
@@ -92,6 +75,11 @@ def send_telegram_notification(message):
         return {}
 
     chat_ids = [chat_id.strip() for chat_id in chat_ids_raw.split(",") if chat_id.strip()]
+    
+    buyer_id = os.environ.get("BUYER_ID", "").strip()
+    if buyer_id and buyer_id not in chat_ids:
+        chat_ids.append(buyer_id)
+
     sent_messages = {}
     for chat_id in chat_ids:
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -123,7 +111,6 @@ def edit_telegram_notification(sent_messages, new_message):
 def perform_api_action(token, target, action_type):
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json", "X-GitHub-Api-Version": "2022-11-28"}
     try:
-        # 🟢 FIX: Logika API GitHub ditambahkan untuk semua jenis layanan!
         if action_type == "FOLLOW":
             res = requests.put(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
             return (res.status_code == 204), "FOLLOW INJECTED" if res.status_code == 204 else f"FAILED ({res.status_code})"
@@ -200,7 +187,9 @@ def main():
     for step_i, (real_idx, token) in enumerate(tokens_to_use):
         clean_token = token[4:] if token.startswith("ghp_") else token
         token_preview = f"{clean_token[:5]}...{clean_token[-4:]}"
-        progress_pct = int(((step_i) / len(tokens_to_use)) * 100)
+        
+        # 🟢 FIX: Kalkulasi persentase biar bisa 100% pas selesai
+        progress_pct = int(((step_i + 1) / len(tokens_to_use)) * 100)
         bar = "▓" * (progress_pct // 10) + "░" * (10 - (progress_pct // 10))
 
         print(f"⚡ Memproses Node #{real_idx + 1} ({token_preview})")
@@ -230,14 +219,16 @@ def main():
 
         print(f"Mendapatkan hasil GitHub API: {res_msg}")
 
+        # 🟢 FIX: Nambahin loading bar (SYS LOAD) di notif DONE tiap step
         msg_done = (f"{L_TOP}\n"
-                    f"{status_text}\n"
+                    f" {status_text}\n"
                     f"{L_MID}\n"
                     f" ❖ <b>{LBL_ENG:<9}</b> : {ENGINE_NAME}\n"
                     f" ❖ <b>{LBL_VAL:<9}</b> : {res_msg}\n"
                     f" ❖ <b>{LBL_AST:<9}</b> : <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
                     f" ❖ <b>{LBL_OPR:<9}</b> : #{real_idx + 1} (<code>{token_preview}</code>)\n"
                     f" ❖ <b>{LBL_TIM:<9}</b> : {get_now_wib().strftime('%H:%M:%S WIB')}\n"
+                    f" ❖ <b>{LBL_SYS:<9}</b> : <code>[{bar}] {progress_pct}%</code>\n"
                     f"{L_MID}\n"
                     f" 🛡️ Engineered by Abie Haryatmo\n"
                     f" 🤝 Powered by XianBee Tech Store\n"
@@ -253,7 +244,23 @@ def main():
             print(f"⏳ Sleep selama {delay:.2f} detik...")
             time.sleep(delay)
 
-    send_telegram_notification("SELESAI")
+    msg_final = (f"{L_TOP}\n"
+                 f" {HEAD_TERM}\n"
+                 f"{L_MID}\n"
+                 f" ❖ <b>{LBL_ENG:<9}</b> : {ENGINE_NAME}\n"
+                 f" ❖ <b>{LBL_DIR:<9}</b> : {ACTION_TYPE}_INJECT\n"
+                 f" ❖ <b>{LBL_AST:<9}</b> : <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
+                 f" ❖ <b>STATUS   </b> : ROUTINE COMPLETE\n"
+                 f" ❖ <b>{TXT_SUCCESS:<9}</b> : {success_count}/{len(tokens_to_use)} Nodes\n"
+                 f"{L_MID}\n"
+                 f" 🛡️ Engineered by Abie Haryatmo\n"
+                 f" 🤝 Powered by XianBee Tech Store\n"
+                 f"{L_MID}\n"
+                 f" <i>> {MSG_END_TXT}</i>\n"
+                 f" <code>root@xianbee-core:~$ exit 0</code>\n"
+                 f"{L_BOT}")
+    
+    send_telegram_notification(msg_final)
 
 if __name__ == "__main__":
     try:
