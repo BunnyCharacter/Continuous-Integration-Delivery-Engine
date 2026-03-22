@@ -24,6 +24,10 @@ on:
         description: 'Nama Mesin (contoh: Engine 4)'
         required: false
         default: 'Engine 4'
+      buyer_id:
+        description: 'Telegram ID Pembeli untuk Notifikasi Live'
+        required: false
+        default: ''
 
 jobs:
   execute-bot:
@@ -52,4 +56,5 @@ jobs:
           INPUT_START: ${{ github.event.inputs.start_index }}
           INPUT_LANG: ${{ github.event.inputs.lang }}
           INPUT_ENGINE_NAME: ${{ github.event.inputs.engine_name }}
+          BUYER_ID: ${{ github.event.inputs.buyer_id }}
         run: python -u auto.py
