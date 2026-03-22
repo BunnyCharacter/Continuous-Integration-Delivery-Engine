@@ -1,4 +1,4 @@
-import os #WORKER
+import os
 import requests
 import time
 import sys
@@ -123,9 +123,24 @@ def edit_telegram_notification(sent_messages, new_message):
 def perform_api_action(token, target, action_type):
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json", "X-GitHub-Api-Version": "2022-11-28"}
     try:
+        # 🟢 FIX: Logika API GitHub ditambahkan untuk semua jenis layanan!
         if action_type == "FOLLOW":
             res = requests.put(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
             return (res.status_code == 204), "FOLLOW INJECTED" if res.status_code == 204 else f"FAILED ({res.status_code})"
+            
+        elif action_type == "STARS":
+            res = requests.put(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10)
+            return (res.status_code == 204), "STAR INJECTED" if res.status_code == 204 else f"FAILED ({res.status_code})"
+            
+        elif action_type == "FORKS":
+            res = requests.post(f"https://api.github.com/repos/{target}/forks", headers=headers, timeout=10)
+            return (res.status_code in [200, 201, 202]), "FORK INJECTED" if res.status_code in [200, 201, 202] else f"FAILED ({res.status_code})"
+            
+        elif action_type == "WATCH":
+            payload = {"subscribed": True}
+            res = requests.put(f"https://api.github.com/repos/{target}/subscription", headers=headers, json=payload, timeout=10)
+            return (res.status_code == 200), "WATCH INJECTED" if res.status_code == 200 else f"FAILED ({res.status_code})"
+            
     except: return False, "CONNECTION ERROR"
     return False, "UNKNOWN ERROR"
 
