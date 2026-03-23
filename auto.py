@@ -1,4 +1,4 @@
-import os
+import os #auto.py
 import requests
 import time
 import sys
@@ -69,13 +69,14 @@ L_BOT = "╚══════════════════════�
 def send_telegram_notification(message):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat_ids_raw = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "").strip()
     
     if not bot_token or not chat_ids_raw:
         print("❌ ERROR: TELEGRAM_BOT_TOKEN atau TELEGRAM_CHAT_ID kosong/tidak terbaca dari Secrets!")
         return {}
 
+    # LIVE IDS (Channel + Buyer) - Untuk dapetin ID pesan buat diedit
     chat_ids = [chat_id.strip() for chat_id in chat_ids_raw.split(",") if chat_id.strip()]
-    
     buyer_id = os.environ.get("BUYER_ID", "").strip()
     if buyer_id and buyer_id not in chat_ids:
         chat_ids.append(buyer_id)
@@ -85,15 +86,31 @@ def send_telegram_notification(message):
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
         try:
-            print(f"📡 Mencoba mengirim pesan ke Telegram (Chat ID: {chat_id})...")
+            print(f"📡 Mencoba mengirim pesan AWAL ke Telegram Live (Chat ID: {chat_id})...")
             res = requests.post(url, json=payload, timeout=15)
             if res.status_code == 200:
                 sent_messages[chat_id] = res.json()['result']['message_id']
-                print(f"✅ Pesan sukses terkirim!")
+                print(f"✅ Pesan AWAL Live sukses terkirim!")
             else:
                 print(f"❌ TELEGRAM API ERROR ({res.status_code}): {res.text}")
         except Exception as e: 
             print(f"❌ KONEKSI GAGAL ke Telegram: {e}")
+
+    # STATIC IDS (Group Admin) - Cuma dikirim saat AWAL dan AKHIR, tidak disimpan untuk diedit
+    group_ids = [gid.strip() for gid in group_ids_raw.split(",") if gid.strip()]
+    for gid in group_ids:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {"chat_id": gid, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
+        try:
+            print(f"📡 Mencoba mengirim pesan Statis ke Grup Admin (Chat ID: {gid})...")
+            res = requests.post(url, json=payload, timeout=15)
+            if res.status_code == 200:
+                print(f"✅ Pesan Statis sukses terkirim!")
+            else:
+                print(f"❌ TELEGRAM API ERROR GRUP ({res.status_code}): {res.text}")
+        except Exception as e: 
+            print(f"❌ KONEKSI GAGAL ke Telegram Grup: {e}")
+
     return sent_messages
 
 def edit_telegram_notification(sent_messages, new_message):
@@ -105,7 +122,22 @@ def edit_telegram_notification(sent_messages, new_message):
         try: 
             res = requests.post(url, json=payload, timeout=15)
             if res.status_code != 200:
-                print(f"❌ GAGAL EDIT PESAN: {res.text}")
+                print(f"❌ GAGAL EDIT PESAN di {chat_id}: {res.text}")
+            else:
+                print(f"✅ Berhasil mengedit pesan di {chat_id}!")
+        except Exception as e:
+            print(f"❌ KONEKSI GAGAL edit pesan: {e}")
+
+def send_telegram_static_only(message):
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "").strip()
+    if not bot_token or not group_ids_raw: return
+    group_ids = [gid.strip() for gid in group_ids_raw.split(",") if gid.strip()]
+    for gid in group_ids:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {"chat_id": gid, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
+        try:
+            requests.post(url, json=payload, timeout=15)
         except: pass
 
 def perform_api_action(token, target, action_type):
@@ -180,7 +212,8 @@ def main():
                f" <code>root@xianbee-core:~$ init_sequence</code>\n"
                f"{L_BOT}")
     
-    send_telegram_notification(pre_msg)
+    # 🟢 MENGIRIM PESAN AWAL (KE LIVE DAN GRUP) DAN MENYIMPAN ID-NYA
+    live_message_ids = send_telegram_notification(pre_msg)
 
     success_count = 0
 
@@ -210,7 +243,8 @@ def main():
                     f" <code>root@xianbee-core:~$ monitor_traffic</code>\n"
                     f"{L_BOT}")
 
-        sent_msgs = send_telegram_notification(msg_live)
+        # 🟢 EDIT PESAN SAAT PROSES BERJALAN (Hanya ke Channel/Klien)
+        edit_telegram_notification(live_message_ids, msg_live)
 
         success, info = perform_api_action(token, selected_target, ACTION_TYPE)
         if success: success_count += 1
@@ -237,7 +271,8 @@ def main():
                     f" <code>root@xianbee-core:~$ verify_hash</code>\n"
                     f"{L_BOT}")
 
-        edit_telegram_notification(sent_msgs, msg_done)
+        # 🟢 EDIT PESAN SETELAH NODE SELESAI (Hanya ke Channel/Klien)
+        edit_telegram_notification(live_message_ids, msg_done)
 
         if step_i < len(tokens_to_use) - 1:
             delay = random.uniform(base_delay * 0.8, base_delay * 1.2)
@@ -260,7 +295,10 @@ def main():
                  f" <code>root@xianbee-core:~$ exit 0</code>\n"
                  f"{L_BOT}")
     
-    send_telegram_notification(msg_final)
+    # 🟢 EDIT PESAN TERAKHIR KALI DI CHANNEL/KLIEN
+    edit_telegram_notification(live_message_ids, msg_final)
+    # 🟢 KIRIM PESAN BARU KE GRUP ADMIN SEBAGAI PENUTUP
+    send_telegram_static_only(msg_final)
 
 if __name__ == "__main__":
     try:
