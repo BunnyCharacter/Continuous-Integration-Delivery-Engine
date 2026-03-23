@@ -62,11 +62,12 @@ MSG_SYNC_TXT = "Checksum verified. Sync complete."
 MSG_END_TXT  = "Operation concluded. Wiping logs..."
 VAL_SKIP = "ALREADY INJECTED"
 
-L_TOP = "╔════════════════════════════════╗"
-L_MID = "╠════════════════════════════════╣"
-L_BOT = "╚════════════════════════════════╝"
+L_TOP = "╔═════════════════════════╗"
+L_MID = "╠═════════════════════════╣"
+L_BOT = "╚═════════════════════════╝"
 
-def send_telegram_notification(message):
+# 🟢 FIX: TAMBAH PARAMETER SKIP_GROUP AGAR TIDAK DOUBLE DI AKHIR PESAN
+def send_telegram_notification(message, skip_group=False):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat_ids_raw = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "").strip()
@@ -96,20 +97,23 @@ def send_telegram_notification(message):
         except Exception as e: 
             print(f"❌ KONEKSI GAGAL ke Telegram: {e}")
 
-    # STATIC IDS (Group Admin) - Cuma dikirim saat AWAL dan AKHIR, tidak disimpan untuk diedit
-    group_ids = [gid.strip() for gid in group_ids_raw.split(",") if gid.strip()]
-    for gid in group_ids:
-        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        payload = {"chat_id": gid, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
-        try:
-            print(f"📡 Mencoba mengirim pesan Statis ke Grup Admin (Chat ID: {gid})...")
-            res = requests.post(url, json=payload, timeout=15)
-            if res.status_code == 200:
-                print(f"✅ Pesan Statis sukses terkirim!")
-            else:
-                print(f"❌ TELEGRAM API ERROR GRUP ({res.status_code}): {res.text}")
-        except Exception as e: 
-            print(f"❌ KONEKSI GAGAL ke Telegram Grup: {e}")
+    if not skip_group:
+        # STATIC IDS (Group Admin) - Cuma dikirim saat AWAL dan AKHIR, tidak disimpan untuk diedit
+        group_ids = [gid.strip() for gid in group_ids_raw.split(",") if gid.strip()]
+        for gid in group_ids:
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {"chat_id": gid, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
+            try:
+                print(f"📡 Mencoba mengirim pesan Statis ke Grup Admin (Chat ID: {gid})...")
+                res = requests.post(url, json=payload, timeout=15)
+                if res.status_code == 200:
+                    # 🟢 FIX: SIMPAN ID GRUP AGAR BISA IKUTAN DI-EDIT SECARA ADIL!
+                    sent_messages[gid] = res.json()['result']['message_id']
+                    print(f"✅ Pesan Statis sukses terkirim!")
+                else:
+                    print(f"❌ TELEGRAM API ERROR GRUP ({res.status_code}): {res.text}")
+            except Exception as e: 
+                print(f"❌ KONEKSI GAGAL ke Telegram Grup: {e}")
 
     return sent_messages
 
@@ -128,6 +132,7 @@ def edit_telegram_notification(sent_messages, new_message):
         except Exception as e:
             print(f"❌ KONEKSI GAGAL edit pesan: {e}")
 
+# 🟢 FUNGSI INI KEMBALI 100% UTUH SESUAI STRUKTUR ASLI LU
 def send_telegram_static_only(message):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "").strip()
@@ -212,16 +217,39 @@ def main():
                f" <code>root@xianbee-core:~$ init_sequence</code>\n"
                f"{L_BOT}")
     
-    # 🟢 MENGIRIM PESAN AWAL (KE LIVE DAN GRUP) DAN MENYIMPAN ID-NYA
-    live_message_ids = send_telegram_notification(pre_msg)
+    # 🟢 GELEMBUNG 1: PESAN AWAL (STATIS)
+    send_telegram_notification(pre_msg)
+
+    # 🟢 GELEMBUNG 2: PESAN PROGRESS BAR (DISIMPAN UNTUK DIEDIT)
+    msg_live_initial = (f"{L_TOP}\n"
+                        f" {HEAD_LIVE}\n"
+                        f"{L_MID}\n"
+                        f" ❖ <b>{LBL_ENG:<9}</b> : {ENGINE_NAME}\n"
+                        f" ❖ <b>{LBL_AST:<9}</b> : <a href='https://github.com/{selected_target}'>{selected_target}</a>\n"
+                        f" ❖ <b>{LBL_OPR:<9}</b> : {worker_info}\n"
+                        f" ❖ <b>{LBL_QUE:<9}</b> : INITIATING...\n"
+                        f" ❖ <b>{LBL_SYS:<9}</b> : <code>[{bar_init}] 0%</code>\n"
+                        f"{L_MID}\n"
+                        f" 🛡️ Engineered by Abie Haryatmo\n"
+                        f" 🤝 Powered by XianBee Tech Store\n"
+                        f"{L_MID}\n"
+                        f" <i>> Warming up injectors...</i>\n"
+                        f" <code>root@xianbee-core:~$ monitor_traffic</code>\n"
+                        f"{L_BOT}")
+    
+    live_message_ids = send_telegram_notification(msg_live_initial)
 
     success_count = 0
+    dead_nodes_list = []
+    dead_message_ids = {} 
+    
+    # Menyaring ID agar grup dan channel/buyer bisa diedit secara terpisah
+    group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "")
 
     for step_i, (real_idx, token) in enumerate(tokens_to_use):
         clean_token = token[4:] if token.startswith("ghp_") else token
         token_preview = f"{clean_token[:5]}...{clean_token[-4:]}"
         
-        # 🟢 FIX: Kalkulasi persentase biar bisa 100% pas selesai
         progress_pct = int(((step_i + 1) / len(tokens_to_use)) * 100)
         bar = "▓" * (progress_pct // 10) + "░" * (10 - (progress_pct // 10))
 
@@ -243,17 +271,47 @@ def main():
                     f" <code>root@xianbee-core:~$ monitor_traffic</code>\n"
                     f"{L_BOT}")
 
-        # 🟢 EDIT PESAN SAAT PROSES BERJALAN (Hanya ke Channel/Klien)
-        edit_telegram_notification(live_message_ids, msg_live)
+        # 🟢 EDIT GELEMBUNG 2 SAAT PROSES BERJALAN (Channel/Klien diedit tiap step)
+        chat_buyer_ids = {k: v for k, v in live_message_ids.items() if str(k) not in group_ids_raw}
+        edit_telegram_notification(chat_buyer_ids, msg_live)
+
+        # 🟢 GRUP ADMIN DIEDIT TIAP KELIPATAN 5 EKSEKUSI
+        if step_i % 5 == 0:
+            group_only_ids = {k: v for k, v in live_message_ids.items() if str(k) in group_ids_raw}
+            edit_telegram_notification(group_only_ids, msg_live)
 
         success, info = perform_api_action(token, selected_target, ACTION_TYPE)
-        if success: success_count += 1
         res_msg = info
         status_text = STAT_SUCC if success else STAT_FAIL
 
+        if success: 
+            success_count += 1
+        else:
+            # 🟢 GELEMBUNG 3 (+1 OPTIONAL): TRACKER DEAD NODES
+            dead_nodes_list.append(f"#{real_idx + 1} (<code>{token_preview}</code>) - {res_msg}")
+            
+            dead_msg = (f"{L_TOP}\n"
+                        f" 🔴 <b>DEAD NODES TRACKER</b>\n"
+                        f"{L_MID}\n"
+                        f" ❖ <b>{LBL_ENG:<9}</b> : {ENGINE_NAME}\n"
+                        f" ❖ <b>TOTAL FAIL </b> : {len(dead_nodes_list)} Nodes\n"
+                        f"{L_MID}\n")
+            
+            for d in dead_nodes_list[-100:]:
+                dead_msg += f"  ❌ {d}\n"
+                
+            if len(dead_nodes_list) > 100:
+                dead_msg += f"  ... (+{len(dead_nodes_list)-100} lainnya hidden)\n"
+                
+            dead_msg += f"{L_BOT}"
+
+            if not dead_message_ids:
+                dead_message_ids = send_telegram_notification(dead_msg)
+            else:
+                edit_telegram_notification(dead_message_ids, dead_msg)
+
         print(f"Mendapatkan hasil GitHub API: {res_msg}")
 
-        # 🟢 FIX: Nambahin loading bar (SYS LOAD) di notif DONE tiap step
         msg_done = (f"{L_TOP}\n"
                     f" {status_text}\n"
                     f"{L_MID}\n"
@@ -271,13 +329,22 @@ def main():
                     f" <code>root@xianbee-core:~$ verify_hash</code>\n"
                     f"{L_BOT}")
 
-        # 🟢 EDIT PESAN SETELAH NODE SELESAI (Hanya ke Channel/Klien)
-        edit_telegram_notification(live_message_ids, msg_done)
+        # 🟢 Ngedit Gelembung 2: LIVE PROGRESS (Setelah Node Kelar)
+        edit_telegram_notification(chat_buyer_ids, msg_done)
 
         if step_i < len(tokens_to_use) - 1:
             delay = random.uniform(base_delay * 0.8, base_delay * 1.2)
             print(f"⏳ Sleep selama {delay:.2f} detik...")
             time.sleep(delay)
+
+    dead_info = ""
+    if dead_nodes_list:
+        dead_info = f" ❖ <b>DEAD NODES   </b> :\n"
+        for d in dead_nodes_list[:10]:
+            dead_info += f"     - {d}\n"
+        if len(dead_nodes_list) > 10:
+            dead_info += f"     - ... (+{len(dead_nodes_list)-10} lainnya hidden)\n"
+        dead_info += f"{L_MID}\n"
 
     msg_final = (f"{L_TOP}\n"
                  f" {HEAD_TERM}\n"
@@ -288,6 +355,7 @@ def main():
                  f" ❖ <b>STATUS   </b> : ROUTINE COMPLETE\n"
                  f" ❖ <b>{TXT_SUCCESS:<9}</b> : {success_count}/{len(tokens_to_use)} Nodes\n"
                  f"{L_MID}\n"
+                 f"{dead_info}"
                  f" 🛡️ Engineered by Abie Haryatmo\n"
                  f" 🤝 Powered by XianBee Tech Store\n"
                  f"{L_MID}\n"
@@ -295,9 +363,18 @@ def main():
                  f" <code>root@xianbee-core:~$ exit 0</code>\n"
                  f"{L_BOT}")
     
+    # ===============================================
+    # 🟢 GELEMBUNG 4 (PALING BAWAH): TERMINATED
+    # ===============================================
+    # Bikin bubble baru untuk Channel & Buyer (Skip grup biar tidak double)
+    send_telegram_notification(msg_final, skip_group=True)
+
     # 🟢 EDIT PESAN TERAKHIR KALI DI CHANNEL/KLIEN
-    edit_telegram_notification(live_message_ids, msg_final)
+    # (Kode dipertahankan, kita ubah progress bar jadi 100% final agar tidak berubah jadi Terminated)
+    edit_telegram_notification(live_message_ids, msg_done)
+    
     # 🟢 KIRIM PESAN BARU KE GRUP ADMIN SEBAGAI PENUTUP
+    # (Kode lu tetap utuh dan dipanggil sesuai aslinya!)
     send_telegram_static_only(msg_final)
 
 if __name__ == "__main__":
