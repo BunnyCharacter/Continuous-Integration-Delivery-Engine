@@ -4,7 +4,7 @@ on:
   workflow_dispatch: 
     inputs:
       target:
-        description: 'Target Repository (contoh: ithallodieh/immutable-bastion)'
+        description: 'Target Repo (contoh: owner/repo)'
         required: true
       quantity:
         description: 'Jumlah eksekusi'
@@ -24,6 +24,10 @@ on:
         description: 'Nama Mesin (contoh: Engine 4)'
         required: false
         default: 'Engine 4'
+      buyer_id:
+        description: 'Telegram ID Pembeli untuk Notifikasi Live'
+        required: false
+        default: ''
 
 jobs:
   execute-bot:
@@ -40,16 +44,18 @@ jobs:
       - name: Install Packages
         run: pip install requests
 
-      - name: 🍴 RUN FORK SQUAD
+      - name: 🚀 RUN FORK SQUAD
         env:
           WORKER_TOKENS: ${{ secrets.WORKER_TOKENS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          ACTION_TYPE: "FORK"
+          TELEGRAM_GROUP_ID: ${{ secrets.TELEGRAM_GROUP_ID }}
+          ACTION_TYPE: "FORKS"
           TARGET_REPOS: ${{ github.event.inputs.target }}
           INPUT_QTY: ${{ github.event.inputs.quantity }}
           INPUT_DUR: ${{ github.event.inputs.duration }}
           INPUT_START: ${{ github.event.inputs.start_index }}
           INPUT_LANG: ${{ github.event.inputs.lang }}
           INPUT_ENGINE_NAME: ${{ github.event.inputs.engine_name }}
+          BUYER_ID: ${{ github.event.inputs.buyer_id }}
         run: python -u auto.py
