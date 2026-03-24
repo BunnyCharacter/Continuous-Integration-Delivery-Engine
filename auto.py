@@ -71,7 +71,7 @@ def send_telegram_notification(message, skip_group=False):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat_ids_raw = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "").strip()
-    
+
     if not bot_token or not chat_ids_raw:
         print("❌ ERROR: TELEGRAM_BOT_TOKEN atau TELEGRAM_CHAT_ID kosong/tidak terbaca dari Secrets!")
         return {}
@@ -145,26 +145,60 @@ def send_telegram_static_only(message):
             requests.post(url, json=payload, timeout=15)
         except: pass
 
+# 🚀 FITUR BARU: RADAR TRIPLE CHECK (ANTI GHOSTING & ALREADY USED)
 def perform_api_action(token, target, action_type):
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json", "X-GitHub-Api-Version": "2022-11-28"}
     try:
         if action_type == "FOLLOW":
+            # 1. CEK STATUS SEBELUMNYA (Mencegah laporan palsu kalau udah follow)
+            cek_res = requests.get(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
+            if cek_res.status_code == 204:
+                return False, "ALREADY FOLLOWING"
+            
+            # 2. EKSEKUSI INJEKSI
             res = requests.put(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
-            return (res.status_code == 204), "FOLLOW INJECTED" if res.status_code == 204 else f"FAILED ({res.status_code})"
-            
+            if res.status_code == 204:
+                # 3. DOUBLE CHECK (Radar pendeteksi Shadowban/Ghosting dari GitHub)
+                time.sleep(1.5) # Jeda agar database GitHub sinkron
+                cek_lagi = requests.get(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
+                if cek_lagi.status_code == 404:
+                    return False, "GHOSTED / SHADOWBANNED"
+                return True, "FOLLOW INJECTED"
+            return False, f"FAILED ({res.status_code})"
+
         elif action_type == "STARS":
+            cek_res = requests.get(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10)
+            if cek_res.status_code == 204:
+                return False, "ALREADY STARRED"
+                
             res = requests.put(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10)
-            return (res.status_code == 204), "STAR INJECTED" if res.status_code == 204 else f"FAILED ({res.status_code})"
-            
+            if res.status_code == 204:
+                time.sleep(1.5)
+                cek_lagi = requests.get(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10)
+                if cek_lagi.status_code == 404:
+                    return False, "GHOSTED / SHADOWBANNED"
+                return True, "STAR INJECTED"
+            return False, f"FAILED ({res.status_code})"
+
         elif action_type == "FORKS":
             res = requests.post(f"https://api.github.com/repos/{target}/forks", headers=headers, timeout=10)
             return (res.status_code in [200, 201, 202]), "FORK INJECTED" if res.status_code in [200, 201, 202] else f"FAILED ({res.status_code})"
-            
+
         elif action_type == "WATCH":
+            cek_res = requests.get(f"https://api.github.com/repos/{target}/subscription", headers=headers, timeout=10)
+            if cek_res.status_code == 200:
+                return False, "ALREADY WATCHING"
+                
             payload = {"subscribed": True}
             res = requests.put(f"https://api.github.com/repos/{target}/subscription", headers=headers, json=payload, timeout=10)
-            return (res.status_code == 200), "WATCH INJECTED" if res.status_code == 200 else f"FAILED ({res.status_code})"
-            
+            if res.status_code == 200:
+                time.sleep(1.5)
+                cek_lagi = requests.get(f"https://api.github.com/repos/{target}/subscription", headers=headers, timeout=10)
+                if cek_lagi.status_code != 200:
+                    return False, "GHOSTED / SHADOWBANNED"
+                return True, "WATCH INJECTED"
+            return False, f"FAILED ({res.status_code})"
+
     except: return False, "CONNECTION ERROR"
     return False, "UNKNOWN ERROR"
 
@@ -200,6 +234,14 @@ def main():
     print(f"📊 Menjalankan {len(tokens_to_use)} antrean dengan base delay {base_delay} detik.")
 
     bar_init = "░" * 10
+    
+    # Inisialisasi counter di awal
+    success_count = 0
+    skipped_count = 0
+    failed_count = 0
+    dead_nodes_list = []
+    dead_message_ids = {} 
+    
     pre_msg = (f"{L_TOP}\n"
                f" {HEAD_INIT}\n"
                f"{L_MID}\n"
@@ -216,7 +258,7 @@ def main():
                f" <i>> {MSG_INIT_TXT}</i>\n"
                f" <code>root@xianbee-core:~$ init_sequence</code>\n"
                f"{L_BOT}")
-    
+
     # 🟢 GELEMBUNG 1: PESAN AWAL (STATIS)
     send_telegram_notification(pre_msg)
 
@@ -230,26 +272,24 @@ def main():
                         f" ❖ <b>{LBL_QUE:<9}</b> : INITIATING...\n"
                         f" ❖ <b>{LBL_SYS:<9}</b> : <code>[{bar_init}] 0%</code>\n"
                         f"{L_MID}\n"
+                        f" 🟢 <b>SUCCESS : {success_count}</b> | 🟡 <b>SKIPPED : {skipped_count}</b> | 🔴 <b>FAILED : {failed_count}</b>\n"
+                        f"{L_MID}\n"
                         f" 🛡️ Engineered by Abie Haryatmo\n"
                         f" 🤝 Powered by XianBee Tech Store\n"
                         f"{L_MID}\n"
                         f" <i>> Warming up injectors...</i>\n"
                         f" <code>root@xianbee-core:~$ monitor_traffic</code>\n"
                         f"{L_BOT}")
-    
+
     live_message_ids = send_telegram_notification(msg_live_initial)
 
-    success_count = 0
-    dead_nodes_list = []
-    dead_message_ids = {} 
-    
     # Menyaring ID agar grup dan channel/buyer bisa diedit secara terpisah
     group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "")
 
     for step_i, (real_idx, token) in enumerate(tokens_to_use):
         clean_token = token[4:] if token.startswith("ghp_") else token
         token_preview = f"{clean_token[:5]}...{clean_token[-4:]}"
-        
+
         progress_pct = int(((step_i + 1) / len(tokens_to_use)) * 100)
         bar = "▓" * (progress_pct // 10) + "░" * (10 - (progress_pct // 10))
 
@@ -263,6 +303,8 @@ def main():
                     f" ❖ <b>{LBL_OPR:<9}</b> : #{real_idx + 1} (<code>{token_preview}</code>)\n"
                     f" ❖ <b>{LBL_QUE:<9}</b> : SEQ {step_i + 1}/{len(tokens_to_use)}\n"
                     f" ❖ <b>{LBL_SYS:<9}</b> : <code>[{bar}] {progress_pct}%</code>\n"
+                    f"{L_MID}\n"
+                    f" 🟢 <b>SUCCESS : {success_count}</b> | 🟡 <b>SKIPPED : {skipped_count}</b> | 🔴 <b>FAILED : {failed_count}</b>\n"
                     f"{L_MID}\n"
                     f" 🛡️ Engineered by Abie Haryatmo\n"
                     f" 🤝 Powered by XianBee Tech Store\n"
@@ -286,23 +328,27 @@ def main():
 
         if success: 
             success_count += 1
+        elif "ALREADY" in res_msg:
+            skipped_count += 1
+            status_text = STAT_SKIP
         else:
-            # 🟢 GELEMBUNG 3 (+1 OPTIONAL): TRACKER DEAD NODES
+            failed_count += 1
+            # 🟢 GELEMBUNG 3 (+1 OPTIONAL): TRACKER DEAD NODES (Hanya untuk yang benar-benar error/banned)
             dead_nodes_list.append(f"#{real_idx + 1} (<code>{token_preview}</code>) - {res_msg}")
-            
+
             dead_msg = (f"{L_TOP}\n"
                         f" 🔴 <b>DEAD NODES TRACKER</b>\n"
                         f"{L_MID}\n"
                         f" ❖ <b>{LBL_ENG:<9}</b> : {ENGINE_NAME}\n"
                         f" ❖ <b>TOTAL FAIL </b> : {len(dead_nodes_list)} Nodes\n"
                         f"{L_MID}\n")
-            
+
             for d in dead_nodes_list[-100:]:
                 dead_msg += f"  ❌ {d}\n"
-                
+
             if len(dead_nodes_list) > 100:
                 dead_msg += f"  ... (+{len(dead_nodes_list)-100} lainnya hidden)\n"
-                
+
             dead_msg += f"{L_BOT}"
 
             if not dead_message_ids:
@@ -321,6 +367,8 @@ def main():
                     f" ❖ <b>{LBL_OPR:<9}</b> : #{real_idx + 1} (<code>{token_preview}</code>)\n"
                     f" ❖ <b>{LBL_TIM:<9}</b> : {get_now_wib().strftime('%H:%M:%S WIB')}\n"
                     f" ❖ <b>{LBL_SYS:<9}</b> : <code>[{bar}] {progress_pct}%</code>\n"
+                    f"{L_MID}\n"
+                    f" 🟢 <b>SUCCESS : {success_count}</b> | 🟡 <b>SKIPPED : {skipped_count}</b> | 🔴 <b>FAILED : {failed_count}</b>\n"
                     f"{L_MID}\n"
                     f" 🛡️ Engineered by Abie Haryatmo\n"
                     f" 🤝 Powered by XianBee Tech Store\n"
@@ -355,6 +403,8 @@ def main():
                  f" ❖ <b>STATUS   </b> : ROUTINE COMPLETE\n"
                  f" ❖ <b>{TXT_SUCCESS:<9}</b> : {success_count}/{len(tokens_to_use)} Nodes\n"
                  f"{L_MID}\n"
+                 f" 🟢 <b>SUCCESS : {success_count}</b> | 🟡 <b>SKIPPED : {skipped_count}</b> | 🔴 <b>FAILED : {failed_count}</b>\n"
+                 f"{L_MID}\n"
                  f"{dead_info}"
                  f" 🛡️ Engineered by Abie Haryatmo\n"
                  f" 🤝 Powered by XianBee Tech Store\n"
@@ -362,7 +412,7 @@ def main():
                  f" <i>> {MSG_END_TXT}</i>\n"
                  f" <code>root@xianbee-core:~$ exit 0</code>\n"
                  f"{L_BOT}")
-    
+
     # ===============================================
     # 🟢 GELEMBUNG 4 (PALING BAWAH): TERMINATED
     # ===============================================
@@ -372,7 +422,7 @@ def main():
     # 🟢 EDIT PESAN TERAKHIR KALI DI CHANNEL/KLIEN
     # (Kode dipertahankan, kita ubah progress bar jadi 100% final agar tidak berubah jadi Terminated)
     edit_telegram_notification(live_message_ids, msg_done)
-    
+
     # 🟢 KIRIM PESAN BARU KE GRUP ADMIN SEBAGAI PENUTUP
     # (Kode lu tetap utuh dan dipanggil sesuai aslinya!)
     send_telegram_static_only(msg_final)
