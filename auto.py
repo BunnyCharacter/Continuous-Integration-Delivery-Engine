@@ -1,4 +1,4 @@
-import os #auto.py
+import os
 import requests
 import time
 import sys
@@ -60,23 +60,22 @@ MSG_INIT_TXT = "Establishing secure uplink..."
 MSG_LIVE_TXT = "Deploying payload to target..."
 MSG_SYNC_TXT = "Checksum verified. Sync complete."
 MSG_END_TXT  = "Operation concluded. Wiping logs..."
-VAL_SKIP = "ALREADY INJECTED"
 
 L_TOP = "╔═════════════════════════╗"
 L_MID = "╠═════════════════════════╣"
 L_BOT = "╚═════════════════════════╝"
 
-# 🟢 FIX: TAMBAH PARAMETER SKIP_GROUP AGAR TIDAK DOUBLE DI AKHIR PESAN
+# ==========================================
+# 📡 TELEGRAM NOTIFICATION SYSTEM
+# ==========================================
 def send_telegram_notification(message, skip_group=False):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat_ids_raw = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "").strip()
 
     if not bot_token or not chat_ids_raw:
-        print("❌ ERROR: TELEGRAM_BOT_TOKEN atau TELEGRAM_CHAT_ID kosong/tidak terbaca dari Secrets!")
         return {}
 
-    # LIVE IDS (Channel + Buyer) - Untuk dapetin ID pesan buat diedit
     chat_ids = [chat_id.strip() for chat_id in chat_ids_raw.split(",") if chat_id.strip()]
     buyer_id = os.environ.get("BUYER_ID", "").strip()
     if buyer_id and buyer_id not in chat_ids:
@@ -87,33 +86,21 @@ def send_telegram_notification(message, skip_group=False):
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
         try:
-            print(f"📡 Mencoba mengirim pesan AWAL ke Telegram Live (Chat ID: {chat_id})...")
             res = requests.post(url, json=payload, timeout=15)
             if res.status_code == 200:
                 sent_messages[chat_id] = res.json()['result']['message_id']
-                print(f"✅ Pesan AWAL Live sukses terkirim!")
-            else:
-                print(f"❌ TELEGRAM API ERROR ({res.status_code}): {res.text}")
-        except Exception as e: 
-            print(f"❌ KONEKSI GAGAL ke Telegram: {e}")
+        except: pass
 
     if not skip_group:
-        # STATIC IDS (Group Admin) - Cuma dikirim saat AWAL dan AKHIR, tidak disimpan untuk diedit
         group_ids = [gid.strip() for gid in group_ids_raw.split(",") if gid.strip()]
         for gid in group_ids:
             url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
             payload = {"chat_id": gid, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
             try:
-                print(f"📡 Mencoba mengirim pesan Statis ke Grup Admin (Chat ID: {gid})...")
                 res = requests.post(url, json=payload, timeout=15)
                 if res.status_code == 200:
-                    # 🟢 FIX: SIMPAN ID GRUP AGAR BISA IKUTAN DI-EDIT SECARA ADIL!
                     sent_messages[gid] = res.json()['result']['message_id']
-                    print(f"✅ Pesan Statis sukses terkirim!")
-                else:
-                    print(f"❌ TELEGRAM API ERROR GRUP ({res.status_code}): {res.text}")
-            except Exception as e: 
-                print(f"❌ KONEKSI GAGAL ke Telegram Grup: {e}")
+            except: pass
 
     return sent_messages
 
@@ -123,16 +110,9 @@ def edit_telegram_notification(sent_messages, new_message):
     for chat_id, msg_id in sent_messages.items():
         url = f"https://api.telegram.org/bot{bot_token}/editMessageText"
         payload = {"chat_id": chat_id, "message_id": msg_id, "text": new_message, "parse_mode": "HTML", "disable_web_page_preview": True}
-        try: 
-            res = requests.post(url, json=payload, timeout=15)
-            if res.status_code != 200:
-                print(f"❌ GAGAL EDIT PESAN di {chat_id}: {res.text}")
-            else:
-                print(f"✅ Berhasil mengedit pesan di {chat_id}!")
-        except Exception as e:
-            print(f"❌ KONEKSI GAGAL edit pesan: {e}")
+        try: requests.post(url, json=payload, timeout=15)
+        except: pass
 
-# 🟢 FUNGSI INI KEMBALI 100% UTUH SESUAI STRUKTUR ASLI LU
 def send_telegram_static_only(message):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "").strip()
@@ -141,42 +121,34 @@ def send_telegram_static_only(message):
     for gid in group_ids:
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         payload = {"chat_id": gid, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
-        try:
-            requests.post(url, json=payload, timeout=15)
+        try: requests.post(url, json=payload, timeout=15)
         except: pass
 
-# 🚀 FITUR BARU: RADAR TRIPLE CHECK (ANTI GHOSTING & ALREADY USED)
+# ==========================================
+# 🚀 GITHUB INJECTION API
+# ==========================================
 def perform_api_action(token, target, action_type):
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json", "X-GitHub-Api-Version": "2022-11-28"}
     try:
         if action_type == "FOLLOW":
-            # 1. CEK STATUS SEBELUMNYA (Mencegah laporan palsu kalau udah follow)
             cek_res = requests.get(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
-            if cek_res.status_code == 204:
-                return False, "ALREADY FOLLOWING"
-            
-            # 2. EKSEKUSI INJEKSI
+            if cek_res.status_code == 204: return False, "ALREADY FOLLOWING"
             res = requests.put(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
             if res.status_code == 204:
-                # 3. DOUBLE CHECK (Radar pendeteksi Shadowban/Ghosting dari GitHub)
-                time.sleep(1.5) # Jeda agar database GitHub sinkron
+                time.sleep(1.5) 
                 cek_lagi = requests.get(f"https://api.github.com/user/following/{target}", headers=headers, timeout=10)
-                if cek_lagi.status_code == 404:
-                    return False, "GHOSTED / SHADOWBANNED"
+                if cek_lagi.status_code == 404: return False, "GHOSTED / SHADOWBANNED"
                 return True, "FOLLOW INJECTED"
             return False, f"FAILED ({res.status_code})"
 
         elif action_type == "STARS":
             cek_res = requests.get(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10)
-            if cek_res.status_code == 204:
-                return False, "ALREADY STARRED"
-                
+            if cek_res.status_code == 204: return False, "ALREADY STARRED"
             res = requests.put(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10)
             if res.status_code == 204:
                 time.sleep(1.5)
                 cek_lagi = requests.get(f"https://api.github.com/user/starred/{target}", headers=headers, timeout=10)
-                if cek_lagi.status_code == 404:
-                    return False, "GHOSTED / SHADOWBANNED"
+                if cek_lagi.status_code == 404: return False, "GHOSTED / SHADOWBANNED"
                 return True, "STAR INJECTED"
             return False, f"FAILED ({res.status_code})"
 
@@ -186,23 +158,86 @@ def perform_api_action(token, target, action_type):
 
         elif action_type == "WATCH":
             cek_res = requests.get(f"https://api.github.com/repos/{target}/subscription", headers=headers, timeout=10)
-            if cek_res.status_code == 200:
-                return False, "ALREADY WATCHING"
-                
+            if cek_res.status_code == 200: return False, "ALREADY WATCHING"
             payload = {"subscribed": True}
             res = requests.put(f"https://api.github.com/repos/{target}/subscription", headers=headers, json=payload, timeout=10)
             if res.status_code == 200:
                 time.sleep(1.5)
                 cek_lagi = requests.get(f"https://api.github.com/repos/{target}/subscription", headers=headers, timeout=10)
-                if cek_lagi.status_code != 200:
-                    return False, "GHOSTED / SHADOWBANNED"
+                if cek_lagi.status_code != 200: return False, "GHOSTED / SHADOWBANNED"
                 return True, "WATCH INJECTED"
             return False, f"FAILED ({res.status_code})"
-
     except: return False, "CONNECTION ERROR"
     return False, "UNKNOWN ERROR"
 
+# ====================================================
+# 🦅 JURUS PHOENIX PROTOCOL (REINKARNASI OTOMATIS)
+# ====================================================
+def reinkarnasi_otomatis(sisa_qty, next_start, max_hours):
+    token = os.environ.get("REPO_PAT", "").strip() 
+    repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
+
+    if not token or not repo:
+        print("❌ [PHOENIX] Gagal Reinkarnasi: REPO_PAT tidak terbaca!")
+        return
+
+    if ACTION_TYPE == "FOLLOW": wf_file = "auto_follow.yml"
+    elif ACTION_TYPE == "STARS": wf_file = "auto_star.yml"
+    elif ACTION_TYPE == "FORKS": wf_file = "auto_fork.yml"
+    elif ACTION_TYPE == "WATCH": wf_file = "auto_watch.yml"
+    elif ACTION_TYPE == "TRAFFIC": wf_file = "auto_traffic.yml"
+    elif ACTION_TYPE == "NPM": wf_file = "auto_npm.yml"
+    else: wf_file = "auto_follow.yml"
+
+    # Potong durasi sisa supaya pacing-nya tetap akurat
+    sisa_durasi = max(0.5, INPUT_DUR - max_hours)
+
+    url = f"https://api.github.com/repos/{repo}/actions/workflows/{wf_file}/dispatches"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    payload = {
+        "ref": os.environ.get("GITHUB_REF_NAME", "main"),
+        "inputs": {
+            "target": RAW_TARGETS,
+            "quantity": str(sisa_qty),
+            "duration": str(round(sisa_durasi, 2)),
+            "start_index": str(next_start),
+            "engine_name": f"{ENGINE_NAME} (Relay)",
+            "lang": "en",
+            "buyer_id": os.environ.get("BUYER_ID", "")
+        }
+    }
+    
+    res = requests.post(url, headers=headers, json=payload)
+    if res.status_code == 204:
+        print(f"✅ [PHOENIX PROTOCOL] Reinkarnasi Sisa {sisa_qty} Units BERHASIL!")
+        
+        # Kirim Notifikasi Estetik Pergantian Engine
+        phoenix_msg = (
+            f"╭━━━━━━━━━━━━━━━━━━━━━━━━━╮\n"
+            f"   🔄 <b>P H O E N I X  P R O T O C O L</b>\n"
+            f"╰━━━━━━━━━━━━━━━━━━━━━━━━━╯\n"
+            f"🔸 <code>Engine   :</code> {ENGINE_NAME}\n"
+            f"🔸 <code>Target   :</code> <code>{TARGETS[0]}</code>\n"
+            f"🔸 <code>Status   :</code> Time Limit Reached ({max_hours} Hrs)\n"
+            f"🔸 <code>Action   :</code> Handover to new relay node\n"
+            f"🔸 <code>Rem. QTY :</code> {sisa_qty} Units\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚡ <i>Spawning new worker node to continue operations...</i>"
+        )
+        send_telegram_notification(phoenix_msg, skip_group=False)
+    else:
+        print(f"❌ [PHOENIX PROTOCOL] Gagal menembak reinkarnasi: {res.text}")
+
+# ==========================================
+# 🛠️ MAIN EXECUTION BLOCK
+# ==========================================
 def main():
+    START_TIME = time.time()
+    MAX_HOURS = 5.0 # BATAS AMAN: 5 JAM MAX SEBELUM REINKARNASI
+
     print("Mempersiapkan token pekerja...")
     tokens_raw = os.environ.get("WORKER_TOKENS", "")
     all_tokens = [t.strip() for t in tokens_raw.splitlines() if t.strip()]
@@ -231,11 +266,9 @@ def main():
     else:
         worker_info = f"{len(tokens_to_use)} Nodes ({','.join(idx_list)})"
 
-    print(f"📊 Menjalankan {len(tokens_to_use)} antrean dengan base delay {base_delay} detik.")
+    print(f"📊 Menjalankan {len(tokens_to_use)} antrean dengan base delay {base_delay:.2f} detik.")
 
     bar_init = "░" * 10
-    
-    # Inisialisasi counter di awal
     success_count = 0
     skipped_count = 0
     failed_count = 0
@@ -259,10 +292,8 @@ def main():
                f" <code>root@xianbee-core:~$ init_sequence</code>\n"
                f"{L_BOT}")
 
-    # 🟢 GELEMBUNG 1: PESAN AWAL (STATIS)
     send_telegram_notification(pre_msg)
 
-    # 🟢 GELEMBUNG 2: PESAN PROGRESS BAR (DISIMPAN UNTUK DIEDIT)
     msg_live_initial = (f"{L_TOP}\n"
                         f" {HEAD_LIVE}\n"
                         f"{L_MID}\n"
@@ -284,8 +315,6 @@ def main():
                         f"{L_BOT}")
 
     live_message_ids = send_telegram_notification(msg_live_initial)
-
-    # Menyaring ID agar grup dan channel/buyer bisa diedit secara terpisah
     group_ids_raw = os.environ.get("TELEGRAM_GROUP_ID", "")
 
     for step_i, (real_idx, token) in enumerate(tokens_to_use):
@@ -317,11 +346,9 @@ def main():
                     f" <code>root@xianbee-core:~$ monitor_traffic</code>\n"
                     f"{L_BOT}")
 
-        # 🟢 EDIT GELEMBUNG 2 SAAT PROSES BERJALAN (Channel/Klien diedit tiap step)
         chat_buyer_ids = {k: v for k, v in live_message_ids.items() if str(k) not in group_ids_raw}
         edit_telegram_notification(chat_buyer_ids, msg_live)
 
-        # 🟢 GRUP ADMIN DIEDIT TIAP KELIPATAN 5 EKSEKUSI
         if step_i % 5 == 0:
             group_only_ids = {k: v for k, v in live_message_ids.items() if str(k) in group_ids_raw}
             edit_telegram_notification(group_only_ids, msg_live)
@@ -337,9 +364,7 @@ def main():
             status_text = STAT_SKIP
         else:
             failed_count += 1
-            # 🟢 GELEMBUNG 3 (+1 OPTIONAL): TRACKER DEAD NODES (Hanya untuk yang benar-benar error/banned)
             dead_nodes_list.append(f"#{real_idx + 1} (<code>{token_preview}</code>) - {res_msg}")
-
             dead_msg = (f"{L_TOP}\n"
                         f" 🔴 <b>DEAD NODES TRACKER</b>\n"
                         f"{L_MID}\n"
@@ -347,20 +372,12 @@ def main():
                         f" ❖ <code>{'TOTAL FAIL':<10} :</code> {len(dead_nodes_list)} Nodes\n"
                         f"{L_MID}\n")
 
-            for d in dead_nodes_list[-100:]:
-                dead_msg += f"  ❌ {d}\n"
-
-            if len(dead_nodes_list) > 100:
-                dead_msg += f"  ... (+{len(dead_nodes_list)-100} lainnya hidden)\n"
-
+            for d in dead_nodes_list[-100:]: dead_msg += f"  ❌ {d}\n"
+            if len(dead_nodes_list) > 100: dead_msg += f"  ... (+{len(dead_nodes_list)-100} lainnya hidden)\n"
             dead_msg += f"{L_BOT}"
 
-            if not dead_message_ids:
-                dead_message_ids = send_telegram_notification(dead_msg)
-            else:
-                edit_telegram_notification(dead_message_ids, dead_msg)
-
-        print(f"Mendapatkan hasil GitHub API: {res_msg}")
+            if not dead_message_ids: dead_message_ids = send_telegram_notification(dead_msg)
+            else: edit_telegram_notification(dead_message_ids, dead_msg)
 
         msg_done = (f"{L_TOP}\n"
                     f" {status_text}\n"
@@ -383,8 +400,18 @@ def main():
                     f" <code>root@xianbee-core:~$ verify_hash</code>\n"
                     f"{L_BOT}")
 
-        # 🟢 Ngedit Gelembung 2: LIVE PROGRESS (Setelah Node Kelar)
         edit_telegram_notification(chat_buyer_ids, msg_done)
+
+        # ====================================================
+        # 🦅 TRIGGER PHOENIX PROTOCOL (JIKA WAKTU LEWAT 5 JAM)
+        # ====================================================
+        if (time.time() - START_TIME) >= (MAX_HOURS * 3600):
+            sisa_qty = len(tokens_to_use) - (step_i + 1)
+            if sisa_qty > 0:
+                next_start = real_idx + 2
+                print(f"⏰ LIMIT 5 JAM TERCAPAI! Mengevakuasi {sisa_qty} orderan tersisa...")
+                reinkarnasi_otomatis(sisa_qty, next_start, MAX_HOURS)
+                sys.exit(0) # Keluar dengan aman sebelum ditembak mati oleh GitHub
 
         if step_i < len(tokens_to_use) - 1:
             delay = random.uniform(base_delay * 0.8, base_delay * 1.2)
@@ -394,10 +421,8 @@ def main():
     dead_info = ""
     if dead_nodes_list:
         dead_info = f" ❖ <code>{'DEAD NODES':<10} :</code>\n"
-        for d in dead_nodes_list[:10]:
-            dead_info += f"     - {d}\n"
-        if len(dead_nodes_list) > 10:
-            dead_info += f"     - ... (+{len(dead_nodes_list)-10} lainnya hidden)\n"
+        for d in dead_nodes_list[:10]: dead_info += f"     - {d}\n"
+        if len(dead_nodes_list) > 10: dead_info += f"     - ... (+{len(dead_nodes_list)-10} lainnya hidden)\n"
         dead_info += f"{L_MID}\n"
 
     msg_final = (f"{L_TOP}\n"
@@ -421,18 +446,8 @@ def main():
                  f" <code>root@xianbee-core:~$ exit 0</code>\n"
                  f"{L_BOT}")
 
-    # ===============================================
-    # 🟢 GELEMBUNG 4 (PALING BAWAH): TERMINATED
-    # ===============================================
-    # Bikin bubble baru untuk Channel & Buyer (Skip grup biar tidak double)
     send_telegram_notification(msg_final, skip_group=True)
-
-    # 🟢 EDIT PESAN TERAKHIR KALI DI CHANNEL/KLIEN
-    # (Kode dipertahankan, kita ubah progress bar jadi 100% final agar tidak berubah jadi Terminated)
     edit_telegram_notification(live_message_ids, msg_done)
-
-    # 🟢 KIRIM PESAN BARU KE GRUP ADMIN SEBAGAI PENUTUP
-    # (Kode lu tetap utuh dan dipanggil sesuai aslinya!)
     send_telegram_static_only(msg_final)
 
 if __name__ == "__main__":
