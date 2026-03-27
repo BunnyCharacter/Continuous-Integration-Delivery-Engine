@@ -50,6 +50,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_GROUP_ID: ${{ secrets.TELEGRAM_GROUP_ID }}
+          REPO_PAT: ${{ secrets.PAT_TOKEN }}  # 🦅 BENSIN UTAMA PHOENIX PROTOCOL
           ACTION_TYPE: "FOLLOW"
           TARGET_USERS: ${{ github.event.inputs.target }}
           INPUT_QTY: ${{ github.event.inputs.quantity }}
